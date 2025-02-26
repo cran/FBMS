@@ -11,7 +11,7 @@ NULL
 #' Main algorithm for GMJMCMC (Genetically Modified MJMCMC)
 #'
 #' @param data A matrix containing the data to use in the algorithm,
-#' first column should be the dependent variable, second should be the intercept
+#' first column should be the dependent variable,
 #' and the rest of the columns should be the independent variables.
 #' @param loglik.pi The (log) density to explore
 #' @param loglik.alpha The likelihood function to use for alpha calculation
@@ -59,6 +59,7 @@ gmjmcmc <- function (
   verbose = TRUE
 ) {
   # Verify that the data is well-formed
+  labels <- names(data)[-1]
   data <- check.data(data, verbose)
 
   # Generate default probabilities and parameters if there are none supplied.
@@ -68,7 +69,7 @@ gmjmcmc <- function (
   # Extract labels from column names in dataframe
   labels <- get.labels(data, verbose)
   # Set the transformations option
-  options("gmjmcmc-transformations" = transforms)
+  set.transforms(transforms)
   # Acceptance probability per population
   accept <- vector("list", P)
   accept <- lapply(accept, function (x) x <- 0)
@@ -88,10 +89,10 @@ gmjmcmc <- function (
 
   # Create first population
   F.0 <- gen.covariates(ncol(data) - 2)
-  if (is.null(params$feat$prel.filter))
+  if (is.null(params$prel.select))
     S[[1]] <- F.0
   else
-    S[[1]] <- F.0[params$feat$prel.filter]
+    S[[1]] <- F.0[params$prel.select]
 
   complex <- complex.features(S[[1]])
 
@@ -106,7 +107,7 @@ gmjmcmc <- function (
     
     # Initialize first model of population
     model.cur <- as.logical(rbinom(n = length(S[[p]]), size = 1, prob = 0.5))
-    model.cur.res <- loglik.pre(loglik.pi, model.cur, complex, data.t, params$loglik)
+    model.cur.res <- loglik.pre(loglik.pi, model.cur, complex, data.t, params$loglik, NULL, FALSE)
     model.cur <- list(prob = 0, model = model.cur, coefs = model.cur.res$coefs, crit = model.cur.res$crit, alpha = 0)
     best.crit <- model.cur$crit # Reset first best criteria value
 
@@ -130,7 +131,7 @@ gmjmcmc <- function (
     if (verbose) {
       cat(paste("\rCurrent best crit:", mjmcmc_res$best.crit, "\n"))
       cat("Feature importance:\n")
-      print.dist(marg.probs[[p]], sapply(S[[p]], print.feature, labels = labels, round = 2), probs$filter)
+      print_dist(marg.probs[[p]], sapply(S[[p]], print.feature, labels = labels, round = 2), probs$filter)
     }
     if (params$rescale.large) prev.large <- params$large
     # Generate a new population of features for the next iteration (if this is not the last)
@@ -155,8 +156,10 @@ gmjmcmc <- function (
     best.margs = best.margs,           # Best marginal model probability per population
     accept = accept,                   # Acceptance rate per population
     accept.tot = accept.tot,           # Overall acceptance rate
-    best = max(unlist(best.margs))     # Best marginal model probability throughout the run
+    best = max(unlist(best.margs)),    # Best marginal model probability throughout the run
+    transforms = transforms            # Transformations used by the model
   )
+  results$labels <- labels
   attr(results, "class") <- "gmjmcmc"
   return(results)
 }
@@ -182,7 +185,8 @@ gmjmcmc <- function (
 gmjmcmc.transition <- function (S.t, F.0, data, loglik.alpha, marg.probs.F.0, marg.probs, labels, probs, params, verbose = TRUE) {
   # Sample which features to keep based on marginal inclusion below probs$filter
   feats.keep <- as.logical(rbinom(n = length(marg.probs), size = 1, prob = pmin(marg.probs / probs$filter, 1)))
-
+  
+ 
   # Always keep original covariates if that setting is on
   if (params$keep.org) {
     if (params$prel.filter > 0) {
@@ -192,12 +196,24 @@ gmjmcmc.transition <- function (S.t, F.0, data, loglik.alpha, marg.probs.F.0, ma
     else feats.keep[seq_along(F.0)] <- T
   }
 
+
   # Avoid removing too many features
-  if (length(feats.keep) > 0 && mean(feats.keep) < params$keep.min) {
+  if (length(feats.keep) > 0 && mean(feats.keep) < params$keep.min & sum(feats.keep) < params$pop.max/2) {
     feats.add.n <- round((params$keep.min - mean(feats.keep)) * length(feats.keep))
     feats.add <- sample(which(!feats.keep), feats.add.n)
-    feats.keep[feats.add] <- T
+    if((length(feats.add) + sum(feats.keep))>=params$pop.max)
+      feats.keep[feats.add] <- T
   }
+  
+  if(sum(feats.keep)>params$pop.max)
+  {
+    warning("Number of features to keep greater than pop.max! 
+            Continue with first pop.max features to be kept!
+            \n Ignore if the final set of features with high probabilities is smaller than the specified $feat$pop.max
+            \n Otherwise check your tuning parameters and increase $feat$pop.max or probs$filter!")
+    feats.keep[which(feats.keep==TRUE)[(params$pop.max+1):length(which(feats.keep==TRUE))]] <- FALSE
+  }
+  
 
   # Create a list of which features to replace
   feats.replace <- which(!feats.keep)
@@ -207,20 +223,30 @@ gmjmcmc.transition <- function (S.t, F.0, data, loglik.alpha, marg.probs.F.0, ma
   marg.probs.use <- c(rep(params$eps, length(F.0)), pmin(pmax(marg.probs, params$eps), (1-params$eps)))
 
   # Perform the replacements
+  if(length(S.t)>params$pop.max)
+    feats.replace <- sort(feats.replace,decreasing = T)
   for (i in feats.replace) {
     prev.size <- length(S.t)
     prev.feat.string <- print.feature(S.t[[i]], labels=labels, round = 2)
-    S.t[[i]] <- gen.feature(c(F.0, S.t), marg.probs.use, data, loglik.alpha, probs, length(F.0), params, verbose)
-    if (prev.size > length(S.t)) {
-      if (verbose) {
-        cat("Removed feature", prev.feat.string, "\n")
-        cat("Population shrinking, returning.\n")
-      }
-      return(S.t)
+    if(prev.size>params$pop.max)
+    {
+      cat("Removed feature", prev.feat.string, "\n")
+      S.t[[i]] <- NULL
     }
-    if (verbose) cat("Replaced feature", prev.feat.string, "with", print.feature(S.t[[i]], labels=labels, round = 2), "\n")
-    feats.keep[i] <- T
-    marg.probs.use[i] <- mean(marg.probs.use)
+    else
+    {
+      S.t[[i]] <- gen.feature(c(F.0, S.t), marg.probs.use, data, loglik.alpha, probs, length(F.0), params, verbose)
+      if (prev.size > length(S.t)) {
+        if (verbose) {
+          cat("Removed feature", prev.feat.string, "\n")
+          cat("Population shrinking, returning.\n")
+        }
+        return(S.t)
+      }
+      if (verbose) cat("Replaced feature", prev.feat.string, "with", print.feature(S.t[[i]], labels=labels, round = 2), "\n")
+      feats.keep[i] <- T
+      marg.probs.use[i] <- mean(marg.probs.use)
+    }
   }
 
   # Add additional features if the population is not at max size

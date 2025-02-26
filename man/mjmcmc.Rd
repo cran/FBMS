@@ -6,7 +6,7 @@
 \usage{
 mjmcmc(
   data,
-  loglik.pi,
+  loglik.pi = gaussian.loglik,
   N = 100,
   probs = NULL,
   params = NULL,
@@ -16,7 +16,7 @@ mjmcmc(
 }
 \arguments{
 \item{data}{A matrix containing the data to use in the algorithm,
-first column should be the dependent variable, second should be the intercept
+first column should be the dependent variable,
 and the rest of the columns should be the independent variables.}
 
 \item{loglik.pi}{The (log) density to explore}

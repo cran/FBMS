@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -29,12 +29,12 @@ loglik.example <- function (y, x, model, complex, params) {
 }
 
 ## -----------------------------------------------------------------------------
-params$feat$alpha <- 3
+params$feat$alpha <- "random"
 
 ## -----------------------------------------------------------------------------
 set.seed(1234)
 result <- gmjmcmc(bc, loglik.example, logistic.loglik.alpha, transforms, P=3, N=30, N.final=60, probs, params)
 
-## ---- fig.width=6, fig.height=6-----------------------------------------------
+## ----fig.width=6, fig.height=6------------------------------------------------
 plot(result)
 

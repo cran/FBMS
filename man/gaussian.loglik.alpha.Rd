@@ -25,6 +25,7 @@ This function is just the bare likelihood function
 Note that it only gives a proportional value and is equivalent to least squares
 }
 \examples{
-gaussian.loglik.alpha(1, matrix(rnorm(100), 50), "a * data[, 2]")
-
+\dontrun{
+gaussian.loglik.alpha(my_alpha,my_data,my_mu)
+}
 }

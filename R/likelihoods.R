@@ -20,12 +20,52 @@
 #' 
 #'
 #' @export logistic.loglik
-logistic.loglik <- function (y, x, model, complex, params = list(r = 1)) {
+logistic.loglik <- function (y, x, model, complex, params = list(r = exp(-0.5))) {
   if (length(params) == 0)
     params <- list(r = 1/dim(x)[1])
   suppressWarnings({mod <- fastglm(as.matrix(x[, model]), y, family = binomial())})
-  ret <- (-(mod$deviance -2 * log(params$r) * sum(complex$oc))) / 2
+  ret <- (-(mod$deviance + log(length(y)) * (mod$rank - 1) - 2 * log(params$r) * sum(complex$oc))) / 2
   return(list(crit=ret, coefs=mod$coefficients))
+}
+
+#' Log likelihood function for logistic regression with an approximate Laplace approximations used
+#' This function is created as an example of how to create an estimator that is used
+#' to calculate the marginal likelihood of a model.
+#'
+#' @param y A vector containing the dependent variable
+#' @param x The matrix containing the precalculated features
+#' @param model The model to estimate as a logical vector
+#' @param complex A list of complexity measures for the features
+#' @param params A list of parameters for the log likelihood, supplied by the user
+#'
+#' @return A list with the log marginal likelihood combined with the log prior (crit) and the posterior mode of the coefficients (coefs).
+#'
+#' @examples
+#' logistic.loglik.ala(as.integer(rnorm(100) > 0), matrix(rnorm(100)), TRUE, list(oc = 1))
+#' 
+#'
+#' @export logistic.loglik.ala
+logistic.loglik.ala <- function (y, x, model, complex, params = list(r = exp(-0.5))) {
+  if (length(params) == 0)
+    params <- list(r = 1/dim(x)[1])
+  suppressWarnings({mod <- fastglm(as.matrix(x[, model]), y, family = binomial(),maxit = 1)})
+  ret <- (-(mod$deviance + log(length(y)) * (mod$rank - 1) -2 * log(params$r) * sum(complex$oc))) / 2
+  return(list(crit=ret, coefs=mod$coefficients))
+}
+
+#' Log model prior function 
+#' @param params list of passed parameters of the likelihood in GMJMCMC
+#' @param complex list of complexity measures of the features included into the model 
+#' 
+#' @return A numeric with the log model prior.
+#' 
+#' @examples
+#' log_prior(params = list(r=2), complex = list(oc = 2))
+#' 
+#' @export log_prior
+log_prior <- function (params, complex) {
+  pl <- log(params$r) * (sum(complex$oc))
+  return(pl)
 }
 
 #' Log likelihood function for logistic regression for alpha calculation
@@ -60,11 +100,19 @@ logistic.loglik.alpha <- function (a, data, mu_func) {
 #'
 #' @export gaussian.loglik
 gaussian.loglik <- function (y, x, model, complex, params) {
-  if (length(params) == 0)
-    params <- list(r = 1/dim(x)[1])
-  
+  if(length(params)==0)
+    params <- list()
+  if (length(params$r) == 0)
+    params$r <- 1/dim(x)[1]
+  if(length(params$var) == 0)
+    params$var <- 1
   suppressWarnings({mod <- fastglm(as.matrix(x[, model]), y, family = gaussian())})
-  ret <- (-(mod$deviance + 2 * log(length(y)) * (mod$rank - 1) - 2 * log(params$r) * (sum(complex$oc)))) / 2
+  
+  if(params$var == "unknown")
+    ret <- (-(mod$aic + (log(length(y))-2) * (mod$rank) - 2 * log(params$r) * (sum(complex$oc)))) / 2
+  else
+    ret <- (-(mod$deviance/params$var + log(length(y)) * (mod$rank - 1) - 2 * log(params$r) * (sum(complex$oc)))) / 2
+  
   return(list(crit=ret, coefs=mod$coefficients))
 }
 
@@ -78,13 +126,14 @@ gaussian.loglik <- function (y, x, model, complex, params) {
 #' as a string with the alphas as a\[i\].
 #'
 #' @return A numeric with the log likelihood.
-#' @examples
-#' gaussian.loglik.alpha(1, matrix(rnorm(100), 50), "a * data[, 2]")
-#'
+#' @examples 
+#'\dontrun{
+#'gaussian.loglik.alpha(my_alpha,my_data,my_mu)
+#'}
 #' @export gaussian.loglik.alpha
 gaussian.loglik.alpha <- function (a, data, mu_func) {
-  m <- eval(parse(text = mu_func))
-  sum((data[, 1] - m)^2)
+  m <- eval(parse(text=mu_func))
+  sum((data[,1]-m)^2)
 }
 
 #' Log likelihood function for linear regression using Zellners g-prior

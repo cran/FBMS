@@ -4,7 +4,15 @@
 \alias{predict.gmjmcmc_merged}
 \title{Predict using a merged gmjmcmc result object.}
 \usage{
-\method{predict}{gmjmcmc_merged}(object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), ...)
+\method{predict}{gmjmcmc_merged}(
+  object,
+  x,
+  link = function(x) x,
+  quantiles = c(0.025, 0.5, 0.975),
+  pop = NULL,
+  tol = 1e-07,
+  ...
+)
 }
 \arguments{
 \item{object}{The model to use.}
@@ -13,7 +21,11 @@
 
 \item{link}{The link function to use}
 
-\item{quantiles}{The quantiles to calculate credible intervals for the posterior moddes (in model space).}
+\item{quantiles}{The quantiles to calculate credible intervals for the posterior modes (in model space).}
+
+\item{pop}{The population to plot, defaults to last}
+
+\item{tol}{The tolerance to use for the correlation when finding equivalent features, default is 0.0000001}
 
 \item{...}{Not used.}
 }

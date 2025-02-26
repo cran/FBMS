@@ -6,13 +6,13 @@
 # Generate a multiplication feature
 gen.multiplication <- function (features, marg.probs) {
   # Sample two features to be multiplied
-  feats <- sample.int(n = length(features), size = 2, prob = marg.probs, replace = TRUE)
+  feats <- sample.int(n = length(features), size = 2, prob = marg.probs+0.00001, replace = TRUE)
   create.feature(0, features[feats])
 }
 
 # Generate a modification feature
 gen.modification <- function (features, marg.probs, trans.probs, trans.priors) {
-  feat <- sample.int(n = length(features), size = 1, prob = marg.probs)
+  feat <- sample.int(n = length(features), size = 1, prob = marg.probs+0.00001)
   trans <- sample.int(n = length(trans.probs), size = 1, prob = trans.probs)
   create.feature(trans, features[feat], trans.priors)
 }
@@ -23,7 +23,7 @@ gen.projection <- function (features, marg.probs, trans.probs, max.width, max.si
     max.width <- min(max.width, max.size + 1)
   }
   feat.count <- sample.int(n = (min(max.width, (length(features)))-1), size = 1)
-  feats <- sample.int(n = length(features), size = feat.count, prob = marg.probs)
+  feats <- sample.int(n = length(features), size = feat.count, prob = marg.probs+0.00001)
   trans <- sample.int(n = length(trans.probs), size = 1, prob = trans.probs)
   # TODO: Generate alphas properly using various methods
   alphas <- rep(1, length(feats)+1)
@@ -49,7 +49,7 @@ gen.feature <- function (features, marg.probs, data, loglik.alpha, probs, F.0.si
     # Check that the feature is not too wide or deep
     if (!(depth.feature(feat) > params$D || width.feature(feat) > params$L)) {
       # Generate alphas using the strategy chosen
-      if (params$alpha > 0) {
+      if (params$alpha != "unit") {
         feat <- gen.alphas(params$alpha, feat, data, loglik.alpha, verbose)
       }
       if (!is.null(feat)) {

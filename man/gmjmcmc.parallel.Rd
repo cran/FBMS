@@ -5,12 +5,12 @@
 \title{Run multiple gmjmcmc (Genetically Modified MJMCMC) runs in parallel returning a list of all results.}
 \usage{
 gmjmcmc.parallel(
-  runs,
+  runs = 2,
   cores = getOption("mc.cores", 2L),
   merge.options = list(populations = "best", complex.measure = 2, tol = 1e-07),
   data,
   loglik.pi = gaussian.loglik,
-  loglik.alpha = gaussian.loglik.alpha(),
+  loglik.alpha = gaussian.loglik.alpha,
   transforms,
   ...
 )
@@ -23,7 +23,7 @@ gmjmcmc.parallel(
 \item{merge.options}{A list of options to pass to the \code{\link[=merge_results]{merge_results()}} function run after the}
 
 \item{data}{A matrix containing the data to use in the algorithm,
-first column should be the dependent variable, second should be the intercept
+first column should be the dependent variable,
 and the rest of the columns should be the independent variables.}
 
 \item{loglik.pi}{The (log) density to explore}
@@ -33,7 +33,7 @@ and the rest of the columns should be the independent variables.}
 \item{transforms}{A Character vector including the names of the non-linear functions to be used by the modification
 and the projection operator.}
 
-\item{...}{Further params passed to mjmcmc.}
+\item{...}{Further parameters passed to mjmcmc.}
 }
 \value{
 Results from multiple gmjmcmc runs
@@ -43,19 +43,18 @@ Run multiple gmjmcmc (Genetically Modified MJMCMC) runs in parallel returning a 
 }
 \examples{
 result <- gmjmcmc.parallel(
- runs = 1,
- cores = 1,
- list(populations = "best", complex.measure = 2, tol = 0.0000001),
- matrix(rnorm(600), 100),
- P = 2,
- gaussian.loglik,
- loglik.alpha = gaussian.loglik.alpha,
- c("p0", "exp_dbl")
+  runs = 1,
+  cores = 1,
+  list(populations = "best", complex.measure = 2, tol = 0.0000001),
+  matrix(rnorm(600), 100),
+  P = 2,
+  gaussian.loglik,
+  loglik.alpha = gaussian.loglik.alpha,
+  c("p0", "exp_dbl")
 )
 
 summary(result)
 
 plot(result)
-
 
 }

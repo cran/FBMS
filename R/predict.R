@@ -1,3 +1,47 @@
+#' Predict responses from a BGNLM model
+#'
+#' This function generates predictions from a fitted \code{bgnlm_model} object given a new dataset.
+#'
+#' @param object A fitted \code{bgnlm_model} object obtained from the BGNLM fitting procedure. 
+#'              It should contain the estimated coefficients in \code{model$coefs}.
+#' @param x A \code{data.frame} containing the new data for which predictions are to be made. 
+#'          The variables in \code{x} must match the features used in the model.
+#' @param link A link function to apply to the linear predictor. 
+#'             By default, it is the identity function \code{function(x)\{x\}}, 
+#'             but it can be any function such as \code{plogis} for logistic regression models.
+#' @param ...  Additional arguments to pass to prediction function.
+#'
+#' @return A numeric vector of predicted values for the given data \code{x}. 
+#'         These predictions are calculated as \eqn{\hat{y} = \text{link}(X \beta)}, 
+#'         where \eqn{X} is the design matrix and \eqn{\beta} are the model coefficients.
+#'
+#' @examples
+#' \dontrun{
+#' # Example with simulated data
+#' set.seed(123)
+#' x_train <- data.frame(PlanetaryMassJpt = rnorm(100), RadiusJpt = rnorm(100))
+#' model <- list(
+#'   coefs = c(Intercept = -0.5, PlanetaryMassJpt = 0.2, RadiusJpt = -0.1),
+#'   class = "bgnlm_model"
+#' )
+#' class(model) <- "bgnlm_model"
+#'
+#' # New data for prediction
+#' x_new <- data.frame(PlanetaryMassJpt = c(0.1, -0.3), RadiusJpt = c(0.2, -0.1))
+#'
+#' # Predict using the identity link (default)
+#' preds <- predict.bgnlm_model(model, x_new)
+#' }
+#'
+#' @export
+predict.bgnlm_model <- function(object, x, link = function(x) { x }, ... ) {
+  x.precalc <- model.matrix(
+    as.formula(paste0("~I(", paste0(names(object$coefs)[-1], collapse = ")+I("), ")")),
+    data = x
+  )
+  yhat <- link(x.precalc %*% object$coefs)
+  return(yhat)
+}
 
 
 #' Predict using a gmjmcmc result object.
@@ -19,8 +63,28 @@
 #' 
 #' 
 #' @export
-predict.gmjmcmc <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), ...) {
-  merged <- merge_results(list(object),data = cbind(1,x))
+predict.gmjmcmc <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975),  pop = NULL,tol =  0.0000001, ...) {
+  transforms.bak <- set.transforms(object$transforms)
+  
+  
+  
+  if(!is.null(attr(object,which = "imputed")))
+  {
+    df <- data.frame(x)
+    na.matr <- data.frame(1*(is.na(df)))
+    cm <- colMeans(na.matr)
+    na.matr <- na.matr[,attr(object,which = "imputed")]
+    names(na.matr) <- paste0("mis_",names(na.matr))
+    for (i in which(cm!=0)){
+      df[[i]][is.na(df[[i]])] <- median(df[[i]], na.rm = TRUE)
+    }
+    x <- as.matrix(data.frame(df,na.matr))
+    rm(df)
+    rm(na.matr)
+  } else x <- as.matrix(x)
+  
+  merged <- merge_results(list(object),data = cbind(1, x), populations = pop, tol = tol)
+  set.transforms(transforms.bak)
   return(predict.gmjmcmc_merged(merged, x, link, quantiles))
 }
 
@@ -30,11 +94,28 @@ predict.gmjmcmc <- function (object, x, link = function(x) x, quantiles = c(0.02
 #' @param pop The population to use.
 #' @noRd
 predict.gmjmcmc.2 <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), pop = 1, ...) {
-
+  transforms.bak <- set.transforms(object$transforms)
+  
+  if(!is.null(attr(object,which = "imputed")))
+  {
+    df <- data.frame(x)
+    na.matr <- data.frame(1*(is.na(df)))
+    cm <- colMeans(na.matr)
+    na.matr <- na.matr[,attr(object,which = "imputed")]
+    names(na.matr) <- paste0("mis_",names(na.matr))
+    for (i in which(cm!=0)){
+      df[[i]][is.na(df[[i]])] <- median(df[[i]], na.rm = TRUE)
+    }
+    x <- as.matrix(data.frame(df,na.matr))
+    rm(df)
+    rm(na.matr)
+  } else x <- as.matrix(x)
+  
   mmodel <- lapply(object[1:8], function (x) x[[pop]])
 
   # Precalculate the features for the new data (c(0,1...) is because precalc features thinks there is an intercept and y col).
   x.precalc <- precalc.features(cbind(0, 1, x), mmodel$populations)[, -1]
+  set.transforms(transforms.bak)
   return(predict.mjmcmc(mmodel, x.precalc, link, quantiles))
 }
 
@@ -43,7 +124,10 @@ predict.gmjmcmc.2 <- function (object, x, link = function(x) x, quantiles = c(0.
 #' @param object The model to use.
 #' @param x The new data to use for the prediction, a matrix where each row is an observation.
 #' @param link The link function to use
-#' @param quantiles The quantiles to calculate credible intervals for the posterior moddes (in model space).
+#' @param quantiles The quantiles to calculate credible intervals for the posterior modes (in model space).
+#' @param pop The population to plot, defaults to last
+#' @param tol The tolerance to use for the correlation when finding equivalent features, default is 0.0000001
+#' 
 #' @param ... Not used.
 #' @return A list containing aggregated predictions and per model predictions.
 #' \item{aggr}{Aggregated predictions with mean and quantiles.}
@@ -63,8 +147,26 @@ predict.gmjmcmc.2 <- function (object, x, link = function(x) x, quantiles = c(0.
 #' preds <- predict(result, matrix(rnorm(600), 100))
 #'
 #' @export
-predict.gmjmcmc_merged <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), ...) {
-  x <- as.matrix(x)
+predict.gmjmcmc_merged <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), pop = NULL,tol =  0.0000001, ...) {
+  if(!is.null(attr(object,which = "imputed")))
+  {
+    df <- data.frame(x)
+    na.matr <- data.frame(1*(is.na(df)))
+    cm <- colMeans(na.matr)
+    na.matr <- na.matr[,attr(object,which = "imputed")]
+    names(na.matr) <- paste0("mis_",names(na.matr))
+    for (i in which(cm!=0)){
+      df[[i]][is.na(df[[i]])] <- median(df[[i]], na.rm = TRUE)
+    }
+    x <- as.matrix(data.frame(df,na.matr))
+    rm(df)
+    rm(na.matr)
+  } else x <- as.matrix(x)
+  
+  transforms.bak <- set.transforms(object$transforms)
+  if(!is.null(pop))
+    object <- merge_results(object$results.raw, pop, 2, tol, data = x)
+  
   preds <- list()
   for (i in seq_along(object$results)) {
     preds[[i]] <- list()
@@ -100,7 +202,7 @@ predict.gmjmcmc_merged <- function (object, x, link = function(x) x, quantiles =
       aggr$quantiles <- aggr$quantiles + preds[[i]][[j]]$quantiles * object$results[[i]]$pop.weights[j]
     }
   }
-
+  set.transforms(transforms.bak)
   return(list(aggr = aggr, preds = preds))
 }
 
@@ -119,7 +221,23 @@ predict.gmjmcmc_merged <- function (object, x, link = function(x) x, quantiles =
 predict.mjmcmc <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), ...) {
   # Select the models and features to predict from at this iteration
   
-  x <- as.matrix(cbind(rep(1,dim(x)[1]),x))
+  if(!is.null(attr(object,which = "imputed")))
+  {
+    df <- data.frame(x)
+    na.matr <- data.frame(1*(is.na(df)))
+    cm <- colMeans(na.matr)
+    na.matr <- na.matr[,attr(object,which = "imputed")]
+    names(na.matr) <- paste0("mis_",names(na.matr))
+    for (i in which(cm!=0)){
+      df[[i]][is.na(df[[i]])] <- median(df[[i]], na.rm = TRUE)
+    }
+    x <- as.matrix(data.frame(df,na.matr))
+    rm(df)
+    rm(na.matr)
+  } else x <- as.matrix(x)
+  
+  x <- as.matrix(cbind(rep(1, dim(x)[1]), x))
+  
   
   models <- c(object$models, object$lo.models)[object$model.probs.idx]
 
@@ -150,6 +268,22 @@ predict.mjmcmc <- function (object, x, link = function(x) x, quantiles = c(0.025
 #' @export
 predict.mjmcmc_parallel <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), ...) {
   max.crits <- numeric()
+  
+  if(!is.null(attr(object,which = "imputed")))
+  {
+    df <- data.frame(x)
+    na.matr <- data.frame(1*(is.na(df)))
+    cm <- colMeans(na.matr)
+    na.matr <- na.matr[,attr(object,which = "imputed")]
+    names(na.matr) <- paste0("mis_",names(na.matr))
+    for (i in which(cm!=0)){
+      df[[i]][is.na(df[[i]])] <- median(df[[i]], na.rm = TRUE)
+    }
+    x <- as.matrix(data.frame(df,na.matr))
+    rm(df)
+    rm(na.matr)
+  } else x <- as.matrix(x)
+  
   for (i in seq_along(object)) {
     max.crits <- c(max.crits, object[[i]]$best.crit)
   }
@@ -195,8 +329,27 @@ predict.mjmcmc_parallel <- function (object, x, link = function(x) x, quantiles 
 #' 
 #' @export
 predict.gmjmcmc_parallel <- function (object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), ...) {
+  transforms.bak <- set.transforms(object$transforms)
+  
+  if(!is.null(attr(object,which = "imputed")))
+  {
+    df <- data.frame(x)
+    na.matr <- data.frame(1*(is.na(df)))
+    cm <- colMeans(na.matr)
+    na.matr <- na.matr[,attr(object,which = "imputed")]
+    names(na.matr) <- paste0("mis_",names(na.matr))
+    for (i in which(cm!=0)){
+      df[[i]][is.na(df[[i]])] <- median(df[[i]], na.rm = TRUE)
+    }
+    x <- as.matrix(data.frame(df,na.matr))
+    rm(df)
+    rm(na.matr)
+  } else x <- as.matrix(x)
+  
   merged <- merge_results(object,data = cbind(1, x), ...)
-  predict.gmjmcmc_merged(merged, x, link, quantiles)
+  results <- predict.gmjmcmc_merged(merged, x, link, quantiles)
+  set.transforms(transforms.bak)
+  return(results)
 }
 
 #' Calculate weighted quantiles
