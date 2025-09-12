@@ -32,12 +32,9 @@
 #' result <- gmjmcmc.parallel(
 #'  runs = 1,
 #'  cores = 1,
-#'  list(populations = "best", complex.measure = 2, tol = 0.0000001),
-#'  matrix(rnorm(600), 100),
+#'  y = matrix(rnorm(100), 100),x = matrix(rnorm(600), 100),
 #'  P = 2,
-#'  gaussian.loglik,
-#'  loglik.alpha = gaussian.loglik.alpha,
-#'  c("p0", "exp_dbl")
+#'  transforms = c("p0", "exp_dbl")
 #' )
 #' 
 #' summary(result)
@@ -55,19 +52,19 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
     complex.measure <- 2
   if (is.null(tol))
     tol <- 0.0000001
-
+  
   # Check and filter results that did not run successfully
   results <- filter.results(results)
   raw.results <- results
   res.count <- length(results)
-
+  
   # Select populations to use
   res.lengths <- vector("list")
   for (i in 1:res.count) res.lengths[[i]] <- length(results[[i]]$populations)
   if (populations == "last") pops.use <- res.lengths
   else if (populations == "all") pops.use <- lapply(res.lengths, function(x) 1:x)
   else if (populations == "best") pops.use <- lapply(1:res.count, function(x) which.max(unlist(results[[x]]$best.marg)))
-
+  
   # Get the population weigths to be able to weight the features
   pw <- population.weigths(results, pops.use)
   pop.weights <- pw$weights
@@ -99,7 +96,7 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
       renorms <- append(renorms, pop.weights[weight_idx] * results[[i]]$marg.probs[[pop]])
       results[[i]]$pop.weights[pop] <- pop.weights[weight_idx]
       weight_idx <- weight_idx + 1
-
+      
       model.probs <- marginal.probs.renorm(results[[i]]$models[[pop]], "models")
       results[[i]]$model.probs[[pop]] <- model.probs$probs
       results[[i]]$models[[pop]] <- results[[i]]$models[[pop]][model.probs$idx]
@@ -107,7 +104,9 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
     accept.tot <- results[[i]]$accept.tot
     best <- results[[i]]$best
     for (item in names(results[[i]])) {
-      if (!(item %in% (c("accept.tot", "best", "transforms")))) results[[i]][[item]] <- results[[i]][[item]][pops.use[[i]]]
+      if (!(item %in% (c("accept.tot", "best", "transforms", "fixed", "intercept", "ncov")))) {
+        results[[i]][[item]] <- results[[i]][[item]][pops.use[[i]]]
+      }
     }
     results[[i]]$accept.tot <- accept.tot
     results[[i]]$best <- best
@@ -120,20 +119,43 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
     features <- features[-na.feats]
   }
   feat.count <- length(features)
-
+  
   # Get complexity for all features
   complex <- complex.features(features)
-
+  
   ## Detect equivalent features
   # Generate mock data to compare features with
-  if (is.null(data)) mock.data <- matrix(runif((feat.count + 2)^2, -100, 100), ncol = feat.count + 2)
-  else mock.data <- check.data(data, FALSE)
-  
-  mock.data.precalc <- precalc.features(mock.data, features)[,-(1:2)]
-
+  uk <- 1 
+  good.mock <- FALSE
+  while(!good.mock & uk < 10)
+  {
+    uk <- uk + 1
+    if (is.null(data)) mock.data <- list(x = matrix(runif((results[[1]]$ncov)^2, -100, 100), ncol = results[[1]]$ncov))
+    else 
+      if(is.null(data$x)) mock.data <- list(x = data) else mock.data = data
+    mock.data$fixed = results[[1]]$fixed
+    if (results[[1]]$intercept) mock.data$x <- cbind(1, mock.data$x)
+    
+    mock.data.precalc <- precalc.features(mock.data, features)$x[ , seq_len(feat.count) + results[[1]]$fixed, drop = FALSE]
+    
+    if(min(sapply(1:dim(mock.data.precalc)[2], function(x)sd(mock.data.precalc[,x])))>0)
+    {
+      good.mock <- TRUE
+      break
+    }
+  }
+  if(uk == 10)
+    warning(
+      "Constant features detected in merge_results().\n",
+      " - If not already, provide the 'data' argument in the function call.\n",
+      " - If the warning persists, one or more features in your dataset are constant (no variation).\n",
+      "This should not affect results critically, but please:\n",
+      "   * check your input data, or\n",
+      "   * reconsider the chosen nonlinearities/features."
+    )
   # Calculate the correlation to find equivalent features
   cors <- cor(mock.data.precalc)
-
+  
   # A map to link equivalent features together,
   # row 1-3 are the simplest equivalent features based on three different complexity measures
   # row 4 is the total weighted density of those features
@@ -141,10 +163,10 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
   for (i in seq_len(nrow(cors))) {
     equiv.feats <- which(cors[i, ] >= (1 - tol))
     # Compare equivalent features complexity to find most simple
-    equiv.complex <- list(width=complex$width[equiv.feats], oc=complex$oc[equiv.feats], depth=complex$depth[equiv.feats])
+    equiv.complex <- list(width = complex$width[equiv.feats], oc = complex$oc[equiv.feats], depth = complex$depth[equiv.feats])
     equiv.simplest <- lapply(equiv.complex, which.min)
-    feats.map[1:3,equiv.feats] <- c(equiv.feats[equiv.simplest$width], equiv.feats[equiv.simplest$oc], equiv.feats[equiv.simplest$depth])
-    feats.map[4,equiv.feats] <- sum(renorms[equiv.feats])
+    feats.map[1:3, equiv.feats] <- c(equiv.feats[equiv.simplest$width], equiv.feats[equiv.simplest$oc], equiv.feats[equiv.simplest$depth])
+    feats.map[4, equiv.feats] <- sum(renorms[equiv.feats])
   }
   # Select the simplest features based on the specified complexity measure and sort them
   feats.simplest.ids <- unique(feats.map[complex.measure, ])
@@ -165,7 +187,9 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
     rep.pop = pw$pop.best,
     best.log.posteriors = bests,
     rep.thread = pw$thread.best,
-    transforms = results[[1]]$transforms
+    transforms = results[[1]]$transforms,
+    fixed = results[[1]]$fixed,
+    intercept = results[[1]]$intercept
   )
   attr(merged, "class") <- "gmjmcmc_merged"
   return(merged)
@@ -174,7 +198,7 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
 filter.results <- function (results) {
   res.count <- length(results)
   res.converged <- sum(sapply(results, function(x) length(x) > 1))
-
+  
   if (res.converged == 0) {
     stop(paste0("All chains resulted in an error!", results[[1]],"\n Please debug and restart"))
   }
@@ -206,7 +230,7 @@ population.weigths <- function (results, pops.use) {
     }
   }
   max.crits <- unlist(max.crits)
-
+  
   return(list(weights = exp(max.crits-max.crit) / sum(exp(max.crits-max.crit)), best = max.crit, thread.best = thread.best, pop.best = pop.best))
 }
 
@@ -220,7 +244,9 @@ population.weigths <- function (results, pops.use) {
 #' @return A character representation of a model
 #'
 #' @examples
-#' result <- gmjmcmc(matrix(rnorm(600), 100), P = 2, gaussian.loglik, NULL, c("p0", "exp_dbl"))
+#' result <- gmjmcmc(y = matrix(rnorm(100), 100),
+#' x = matrix(rnorm(600), 100), 
+#' P = 2, transforms =  c("p0", "exp_dbl"))
 #' summary(result)
 #' plot(result)
 #' model.string(c(TRUE, FALSE, TRUE, FALSE, TRUE), result$populations[[1]])
@@ -228,7 +254,7 @@ population.weigths <- function (results, pops.use) {
 #'
 #' @export model.string
 model.string <- function (model, features, link = "I", round = 2) {
-  modelstring <- paste0(sapply(features[model], print.feature, alphas = TRUE, round = round), collapse="+")
+  modelstring <- paste0(sapply(features[model], print.feature, alphas = TRUE, round = round), collapse = "+")
   modelfun <- set_alphas(modelstring)
   modelfun$formula <- paste0(link, "(", modelfun$formula, ")")
   return(modelfun)
@@ -285,22 +311,63 @@ model.string <- function (model, features, link = "I", round = 2) {
 #'
 #' @export
 get.mpm.model <- function(result, y, x, labels = F, family = "gaussian", loglik.pi = gaussian.loglik, params = NULL) {
+  
+  transforms.bak <- set.transforms(result$transforms)
+  
   if (!family %in% c("custom","binomial","gaussian"))
     warning("Unknown family specified. The default gaussian.loglik will be used.")
+  
+  if(!labels & length(result$labels)>0)
+    labels <- result$labels
+  
+  if (!is.null(attr(result, which = "imputed")))
+    x <- impute_x(result,x)
   
   if (family == "binomial")
     loglik.pi <- logistic.loglik
   
-  sm <- summary(result, labels = labels, verbose = FALSE)
-  mpm <- sm$feats.strings[sm$marg.probs > 0.5]
+  if (is(result, "mjmcmc_parallel")) {
+    models <- unlist(lapply(result$chains, function (x) x$models), recursive = FALSE)
+    marg.probs <- marginal.probs.renorm(models)$probs
+    features <- result$chains[[1]]$populations
+  } else if (is(result, "gmjmcmc")) {
+    best_pop <- which.max(unlist(result$best.margs))
+    marg.probs <- result$marg.probs[[best_pop]]
+    features <- result$populations[[best_pop]]
+  } else if (is(result, "gmjmcmc_merged")) {
+    marg.probs <- result$marg.probs
+    features <- result$features
+  }else
+  {
+    marg.probs <- result$marg.probs
+    features <- result$populations
+  }
+  features <- features[marg.probs > 0.5]
   
-  x.precalc <- model.matrix(
-    as.formula(paste0("~I(", paste0(mpm, collapse = ")+I("), ")")),
-    data = x)
+  if (result$intercept) {
+    x <- cbind(1, x)
+  }
+  precalc <- precalc.features(list(x = x, y = y, fixed = result$fixed), features)
   
-  model <- loglik.pi(y = y, x = x.precalc, model = rep(TRUE, length(mpm) + 1), complex = list(oc = 0), params = params)
-  class(model) <- "bgnlm_model"
-  model$crit <- "MPM"
+  coefs <- loglik.pi(y = y, x = precalc$x, model = rep(TRUE, length(features) + result$fixed), complex = list(oc = 0), mlpost_params = params)$coefs
+  
+  coefs[is.na(coefs)] <- 0
+  
+  names(coefs) <- c(names(coefs)[seq_len(result$fixed)], sapply(features, print.feature,labels = labels))
+  
+  
+  model <- structure(list(
+    coefs = coefs,
+    features = features,
+    fixed = result$fixed,
+    intercept = result$intercept,
+    needs.precalc = FALSE
+  ), class = "bgnlm_model")
+  
+  set.transforms(transforms.bak)
+  
+  attr(model, which = "imputed") <- attr(result, which = "imputed")
+  
   return(model)
 }
 
@@ -334,45 +401,65 @@ get.mpm.model <- function(result, y, x, labels = F, family = "gaussian", loglik.
 #' }
 #'
 #' @examples
-#' result <- gmjmcmc(matrix(rnorm(600), 100), P = 2, gaussian.loglik, NULL, c("p0", "exp_dbl"))
+#' result <- gmjmcmc(x = matrix(rnorm(600), 100),
+#' y = matrix(rnorm(100), 100), 
+#' P = 2, transforms = c("p0", "exp_dbl"))
 #' get.best.model(result)
 #'
 #' @export
 get.best.model <- function(result, labels = FALSE) {
   if (is(result,"mjmcmc")) {
-    return(get.best.model.mjmcmc(result, labels))
+    mod <- get.best.model.mjmcmc(result, labels)
+    attr(mod, which = "imputed") <- attr(result, which = "imputed")
+    return(mod)
   }
   
   if (is(result,"mjmcmc_parallel")) {
     if (length(labels) == 1 && labels[1] == FALSE && length(result[[1]]$labels) > 0) {
       labels <- result[[1]]$labels
     }
-    best.chain <- which.max(sapply(result,function(x)x$best.crit))
-    return(get.best.model.mjmcmc(result[[best.chain]], labels))
+    best.chain <- which.max(sapply(result$chains, function (x) x$best.crit))
+    mod <- get.best.model.mjmcmc(result$chains[[best.chain]], labels)
+    attr(mod, which = "imputed") <- attr(result, which = "imputed")
+    return(mod)
   }
   
   if (is(result,"gmjmcmc")) {
-    return(get.best.model.gmjmcmc(result, labels))
+    mod <- get.best.model.gmjmcmc(result, labels)
+    attr(mod, which = "imputed") <- attr(result, which = "imputed")
+    return(mod)
   }
   
   if (is(result,"gmjmcmc_merged")) {
+    
     if (length(labels) == 1 && labels[1] == FALSE && length(result$results.raw[[1]]$labels) > 0) {
       labels <- result$results.raw[[1]]$labels
     }
     best.chain <- which.max(sapply(result$results, function(x) x$best))
-    return(get.best.model.gmjmcmc(result$results.raw[[best.chain]], labels))
+    mod <- get.best.model.gmjmcmc(result$results.raw[[best.chain]], labels)
+    attr(mod, which = "imputed") <- attr(result, which = "imputed")
+    return(mod)
   }
 }
 
 get.best.model.gmjmcmc <- function (result, labels) {
+  transforms.bak <- set.transforms(result$transforms)
   if (length(labels) == 1 && labels[1] == FALSE && length(result$labels) > 0) {
     labels = result$labels
   }
+  
   best.pop.id <- which.max(sapply(result$best.margs,function(x)x))
   best.mod.id <- which.max(sapply(result$models[[best.pop.id]],function(x)x$crit))
   ret <- result$models[[best.pop.id]][[best.mod.id]]
-  names(ret$coefs) <- c("Intercept",sapply(result$populations[[best.pop.id]],print.feature,labels = labels)[which(ret$model)])
+  ret$intercept <- result$intercept
+  ret$fixed <- result$fixed
+  coefnames <- sapply(result$populations[[best.pop.id]], print.feature, labels = labels)[ret$model]
+  if (result$intercept) coefnames <- c("Intercept", coefnames)
+  names(ret$coefs) <- coefnames
+  ret$needs.precalc <- FALSE
   class(ret) = "bgnlm_model"
+  set.transforms(transforms.bak)
+  attr(ret, which = "imputed") <- attr(result, which = "imputed")
   return(ret)
 }
 
@@ -382,7 +469,10 @@ get.best.model.mjmcmc <- function (result, labels) {
   }
   best.mod.id <- which.max(sapply(result$models,function(x)x$crit))
   ret <- result$models[[best.mod.id]]
-  names(ret$coefs) <- c("Intercept",sapply(result$populations,print.feature,labels = labels)[which(ret$model)])
+  coefnames <- sapply(result$populations, print.feature, labels = labels)[ret$model]
+  if (result$intercept) coefnames <- c("Intercept", coefnames)
+  names(ret$coefs) <- coefnames
+  ret$needs.precalc <- FALSE
   class(ret) = "bgnlm_model"
   return(ret)
 }
@@ -395,7 +485,10 @@ get.best.model.mjmcmc <- function (result, labels) {
 #' @return A matrix of character representations of the features of a model.
 #'
 #' @examples
-#' result <- gmjmcmc(matrix(rnorm(600), 100), P = 2, gaussian.loglik, NULL, c("p0", "exp_dbl"))
+#' result <- gmjmcmc(y = matrix(rnorm(100), 100),
+#' x = matrix(rnorm(600), 100), 
+#' P = 2, 
+#' transforms = c("p0", "exp_dbl"))
 #' string.population(result$populations[[1]])
 #'
 #' @export
@@ -413,7 +506,10 @@ string.population <- function(x, round = 2) {
 #' @return A matrix of character representations of a list of models.
 #'
 #' @examples
-#' result <- gmjmcmc(matrix(rnorm(600), 100), P = 2, gaussian.loglik, NULL, c("p0", "exp_dbl"))
+#' result <- gmjmcmc(y = matrix(rnorm(100), 100),
+#' x = matrix(rnorm(600), 100), 
+#' P = 2, 
+#' transforms = c("p0", "exp_dbl"))
 #' string.population.models(result$populations[[2]], result$models[[2]])
 #'
 #' @export
@@ -434,7 +530,10 @@ string.population.models <- function(features, models, round = 2, link = "I") {
 #' @return No return value, just creates a plot
 #'
 #' @examples
-#' result <- gmjmcmc(matrix(rnorm(600), 100), P = 2, gaussian.loglik, NULL, c("p0", "exp_dbl"))
+#' result <- gmjmcmc(y = matrix(rnorm(100), 100),
+#' x = matrix(rnorm(600), 100), 
+#' P = 2, 
+#' transforms = c("p0", "exp_dbl"))
 #' plot(result)
 #' 
 #'
@@ -447,7 +546,7 @@ plot.gmjmcmc <- function (x, count = "all", pop = "best", tol = 0.0000001, data 
     x <- merge_results(results, pop, 2, 0.0000001, data = data)
     return(marg.prob.plot(sapply(x$features, print), x$marg.probs, count = count))
   }
- 
+  
   if (pop == "last") pop <- length(x$populations)
   if (is.null(x$populations)) {
     pops <- x$features
@@ -471,7 +570,10 @@ plot.gmjmcmc <- function (x, count = "all", pop = "best", tol = 0.0000001, data 
 #' @return No return value, just creates a plot
 #'
 #' @examples
-#' result <- mjmcmc(matrix(rnorm(600), 100), gaussian.loglik)
+#' result <- mjmcmc(
+#' y = matrix(rnorm(100), 100),
+#' x = matrix(rnorm(600), 100),
+#' loglik.pi = gaussian.loglik)
 #' plot(result)
 #'
 #' @export 
@@ -488,7 +590,7 @@ plot.mjmcmc <- function (x, count = "all", ...) {
     feats.strings <- sapply(x$populations, print)
     marg.probs <- x$marg.probs
   }
-
+  
   marg.prob.plot(feats.strings, marg.probs, count)
   set.transforms(transforms.bak)
   return("done")
@@ -509,7 +611,11 @@ marg.prob.plot <- function (feats.strings, marg.probs, count = "all", ...) {
 #' @return No return value, just creates a plot
 #' 
 #' @examples
-#' result <- mjmcmc.parallel(runs = 1, cores = 1, matrix(rnorm(600), 100), gaussian.loglik)
+#' result <- mjmcmc.parallel(runs = 1, 
+#' cores = 1, 
+#' y = matrix(rnorm(100), 100),
+#' x = matrix(rnorm(600), 100), 
+#' loglik.pi = gaussian.loglik)
 #' plot(result)
 #' 
 #' @export 
@@ -520,13 +626,13 @@ plot.mjmcmc_parallel <- function (x, count = "all", ...) {
 
 merge_mjmcmc_parallel <- function (x) {
   run.weights <- run.weigths(x)
-  marg.probs <- x[[1]]$marg.probs * run.weights[1]
-  for (i in seq_along(x[-1])) {
-    marg.probs <- marg.probs + x[[i]]$marg.probs * run.weights[i]
+  marg.probs <- x$chains[[1]]$marg.probs * run.weights[1]
+  for (i in seq_along(x[-c(1, (-1:0 + length(x)))])) {
+    marg.probs <- marg.probs + x$chains[[i]]$marg.probs * run.weights[i]
   }
   return(structure(
     list(
-      features = sapply(x[[1]]$populations, print),
+      features = sapply(x$chains[[1]]$populations, print),
       marg.probs = marg.probs,
       results = x
     ),
@@ -536,7 +642,7 @@ merge_mjmcmc_parallel <- function (x) {
 
 
 run.weigths <- function (results) {
-  best.crits <- sapply(results, function (x) x$best.crit)
+  best.crits <- sapply(results$chains, function (x) x$best.crit)
   max.crit <- max(best.crits)
   return(exp(best.crits - max.crit) / sum(exp(best.crits - max.crit)))
 }
@@ -549,12 +655,10 @@ run.weigths <- function (results) {
 #' result <- gmjmcmc.parallel(
 #'  runs = 1,
 #'  cores = 1,
-#'  list(populations = "best", complex.measure = 2, tol = 0.0000001),
-#'  matrix(rnorm(600), 100),
+#'  y = matrix(rnorm(100), 100),
+#'  x = matrix(rnorm(600), 100),
 #'  P = 2,
-#'  gaussian.loglik,
-#'  loglik.alpha = gaussian.loglik.alpha,
-#'  c("p0", "exp_dbl")
+#'  transforms = c("p0", "exp_dbl")
 #' )
 #' plot(result)
 #' 
@@ -586,8 +690,12 @@ plot.gmjmcmc_merged <- function (x, count = "all", pop = NULL,tol =  0.0000001, 
 #' @examples
 #'
 #' data <- data.frame(matrix(rnorm(600), 100))
-#' result <- mjmcmc.parallel(runs = 2, cores = 1, data, gaussian.loglik)
-#' compute_effects(result,labels = names(data)[-1])
+#' result <- mjmcmc.parallel(runs = 2, 
+#' cores = 1, 
+#' y = matrix(rnorm(100), 100),
+#' x = data, 
+#' loglik.pi = gaussian.loglik)
+#' compute_effects(result,labels = names(data))
 #'
 #' @seealso \code{\link{predict}}
 #' @export
@@ -599,7 +707,7 @@ compute_effects <- function(object, labels, quantiles = c(0.025, 0.5, 0.975)) {
   else
     preds.eff <- t(preds.eff$quantiles)
   preds.eff[2:(length(labels) + 1), ] <- preds.eff[2:(length(labels) + 1), ] - preds.eff[1, ]
-
+  
   summ <- data.frame(cbind(c("intercept", labels), round(preds.eff, 4)))
   names(summ) <- c("Covariate", paste0("quant_", quantiles))
   return(summ)

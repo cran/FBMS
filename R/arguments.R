@@ -121,7 +121,7 @@ gen.probs.gmjmcmc <- function (transforms) {
 
 #' Generate a parameter list for MJMCMC (Mode Jumping MCMC)
 #'
-#' @param data The dataset that will be used in the algorithm
+#' @param ncov The number of covariates in the dataset that will be used in the algorithm
 #'
 #' @return A list of parameters to use when running the mjmcmc function.
 #' 
@@ -187,12 +187,8 @@ gen.probs.gmjmcmc <- function (transforms) {
 #' 
 #'
 #' @export gen.params.mjmcmc
-gen.params.mjmcmc <- function (data) {
+gen.params.mjmcmc <- function (ncov) {
   ### Create a list of parameters for the algorithm
-
-  ## Get the dimensions of the data to set parameters based on it
-  data.dim <- data.dims(data)
-  ncov <- data.dim[2] - 2
 
   ## Local optimization parameters
   sa_kern <- list(probs=c(0.1, 0.05, 0.2, 0.3, 0.2, 0.15),
@@ -215,7 +211,7 @@ gen.params.mjmcmc <- function (data) {
   mh_params <- list(neigh.size = 1, neigh.min = 1, neigh.max = 2)      # Regular MH parameters
   ## Compile the list and return
   params <- list(burn_in=burn_in, mh=mh_params, large=large_params, random=random_params,
-                 sa=sa_params, greedy=greedy_params, loglik=list())
+                 sa=sa_params, greedy=greedy_params)
 
   return(params)
 }
@@ -224,7 +220,7 @@ gen.params.mjmcmc <- function (data) {
 #'
 #' This function generates the full list of parameters required for the Generalized Mode Jumping Markov Chain Monte Carlo (GMJMCMC) algorithm, building upon the parameters from \code{gen.params.mjmcmc}. The generated parameter list includes feature generation settings, population control parameters, and optimization controls for the search process.
 #'
-#' @param data A data frame containing the dataset with covariates and response variable.
+#' @param ncov The number of covariates in the dataset that will be used in the algorithm
 #' @return A list of parameters for controlling GMJMCMC behavior:
 #'
 #' @section Feature Generation Parameters (\code{feat}):
@@ -307,23 +303,21 @@ gen.params.mjmcmc <- function (data) {
 #'
 #' @examples
 #' data <- data.frame(y = rnorm(100), x1 = rnorm(100), x2 = rnorm(100))
-#' params <- gen.params.gmjmcmc(data)
+#' params <- gen.params.gmjmcmc(ncol(data) - 1)
 #' str(params)
 #'
 #' @seealso \code{\link{gen.params.mjmcmc}}, \code{\link{gmjmcmc}}
 #' 
 #' @export gen.params.gmjmcmc
-gen.params.gmjmcmc <- function (data) {
+gen.params.gmjmcmc <- function (ncov) {
   # Get mjmcmc params
-  params <- gen.params.mjmcmc(data)
-
-  ncov <- ncol(data) - 2
+  params <- gen.params.mjmcmc(ncov)
 
   feat_params <- list(D = 5, L = 15,                                # Hard limits on feature complexity
                       alpha = "unit",                               # alpha strategy ("unit" = None, "deep" strategy 3 from Hubin et al., "random" fully Bayesian strategy) 
-                      pop.max = min(100,as.integer(ncov * 1.5)),    # Max features population size
+                      pop.max = min(100, as.integer(ncov * 1.5)),   # Max features population size
                       keep.org = FALSE,                             # Always keep original covariates in every population
-                      prel.filter = 0,                           # Filtration threshold for first population (i.e. filter covariates even if keep.org=TRUE)
+                      prel.filter = 0,                              # Filtration threshold for first population (i.e. filter covariates even if keep.org=TRUE)
                       keep.min = 0.8,                               # Minimum proportion of features to always keep [0,1]
                       eps = 0.05,                                   # Inclusion probability limit for feature generation
                       check.col = TRUE,                             # Whether the colinearity should be checked
@@ -333,9 +327,9 @@ gen.params.gmjmcmc <- function (data) {
   
    # Large jump parameters
   large_params <- list(
-    neigh.size = min(as.integer(params$feat$pop.max * 0.35),as.integer(ncov * 0.35),35),
-    neigh.min = min(as.integer(params$feat$pop.max * 0.35),as.integer(ncov * 0.25),25),
-    neigh.max = min(as.integer(params$feat$pop.max * 0.35),as.integer(ncov * 0.45),45)
+    neigh.size = min(as.integer(params$feat$pop.max * 0.35), as.integer(ncov * 0.35), 35),
+    neigh.min = min(as.integer(params$feat$pop.max * 0.35), as.integer(ncov * 0.25), 25),
+    neigh.max = min(as.integer(params$feat$pop.max * 0.35), as.integer(ncov * 0.45), 45)
   )
   params$large <- large_params
   

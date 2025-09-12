@@ -88,13 +88,21 @@ rmclapply <- function(runs, args, fun, mc.cores = NULL) {
 #' @return Merged results from multiple mjmcmc runs
 #'
 #' @examples
-#' result <- mjmcmc.parallel(runs = 1, cores = 1, matrix(rnorm(600), 100), gaussian.loglik)
+#' result <- mjmcmc.parallel(runs = 1, 
+#' cores = 1, 
+#' loglik.pi = FBMS::gaussian.loglik,
+#' y = matrix(rnorm(100), 100),
+#' x = matrix(rnorm(600), 100))
 #' summary(result)
 #' plot(result)
 #'
 #' @export
 mjmcmc.parallel <- function(runs = 2, cores = getOption("mc.cores", 2L), ...) {
-  results <- rmclapply(seq_len(runs), args = list(...), mc.cores = cores, fun = mjmcmc)
+  results <- list()
+  results$chains <- rmclapply(seq_len(runs), args = list(...), mc.cores = cores, fun = mjmcmc)
+  results$fixed <- results$chains[[1]]$fixed
+  results$intercept <- results$chains[[1]]$intercept
+  results$labels <- results$chains[[1]]$labels
   class(results) <- "mjmcmc_parallel"
   gc()
   return(results)
@@ -102,10 +110,16 @@ mjmcmc.parallel <- function(runs = 2, cores = getOption("mc.cores", 2L), ...) {
 
 
 #' Run multiple gmjmcmc (Genetically Modified MJMCMC) runs in parallel returning a list of all results.
+#' @param x matrix containing the design matrix with data to use in the algorithm
+#' @param y response variable 
+#' @param loglik.pi The (log) density to explore
+#' @param mlpost_params parameters for the estimator function loglik.pi
+#' @param loglik.alpha The likelihood function to use for alpha calculation
+#' @param transforms A Character vector including the names of the non-linear functions to be used by the modification 
 #' @param runs The number of runs to run
 #' @param cores The number of cores to run on
-#' @param merge.options A list of options to pass to the [merge_results()] function run after the
-#' @inheritParams gmjmcmc
+#' @param verbose A logical denoting if messages should be printed
+#' @param merge.options A list of options to pass to the [merge_results()] function run after the run
 #' @param ... Further parameters passed to mjmcmc.
 #' @return Results from multiple gmjmcmc runs
 #'
@@ -113,12 +127,10 @@ mjmcmc.parallel <- function(runs = 2, cores = getOption("mc.cores", 2L), ...) {
 #' result <- gmjmcmc.parallel(
 #'   runs = 1,
 #'   cores = 1,
-#'   list(populations = "best", complex.measure = 2, tol = 0.0000001),
-#'   matrix(rnorm(600), 100),
-#'   P = 2,
-#'   gaussian.loglik,
-#'   loglik.alpha = gaussian.loglik.alpha,
-#'   c("p0", "exp_dbl")
+#'   loglik.pi = NULL,
+#'   y = matrix(rnorm(100), 100),
+#'   x = matrix(rnorm(600), 100),
+#'   transforms = c("p0", "exp_dbl")
 #' )
 #'
 #' summary(result)
@@ -126,11 +138,24 @@ mjmcmc.parallel <- function(runs = 2, cores = getOption("mc.cores", 2L), ...) {
 #' plot(result)
 #'
 #' @export
-gmjmcmc.parallel <- function(runs = 2, cores = getOption("mc.cores", 2L), merge.options = list(populations = "best", complex.measure = 2, tol = 0.0000001), data, loglik.pi = gaussian.loglik, loglik.alpha = gaussian.loglik.alpha, transforms, ...) {
+gmjmcmc.parallel <- function(
+  x,
+  y,
+  loglik.pi = NULL,
+  mlpost_params = list(family = "gaussian", beta_prior = list(type = "g-prior")),
+  loglik.alpha = gaussian.loglik.alpha,
+  transforms,
+  runs = 2,
+  cores = getOption("mc.cores", 2L),
+  verbose = FALSE,
+  merge.options = list(populations = "best", complex.measure = 2, tol = 0.0000001),
+  ...
+) {
   options("gmjmcmc-transformations" = transforms)
-  results <- rmclapply(seq_len(runs), args = list(data = data, loglik.pi = loglik.pi, loglik.alpha = loglik.alpha, transforms = transforms, ...), mc.cores = cores, fun = gmjmcmc)
+  results <- rmclapply(seq_len(runs), args = list(x = x, y = y, loglik.pi = loglik.pi, loglik.alpha = loglik.alpha, mlpost_params = mlpost_params, transforms = transforms, verbose = verbose, ...), mc.cores = cores, fun = gmjmcmc)
   class(results) <- "gmjmcmc_parallel"
-  merged <- merge_results(results, merge.options$populations, merge.options$complex.measure, merge.options$tol, data = data)
+  merged <- merge_results(results, merge.options$populations, merge.options$complex.measure, merge.options$tol, data = list(x = x, y = y))
+  merged$labels <- merged$results.raw[[1]]$labels
   gc()
   return(merged)
 }

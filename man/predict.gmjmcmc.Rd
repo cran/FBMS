@@ -11,6 +11,7 @@
   quantiles = c(0.025, 0.5, 0.975),
   pop = NULL,
   tol = 1e-07,
+  x_train = NULL,
   ...
 )
 }
@@ -27,6 +28,8 @@
 
 \item{tol}{The tolerance to use for the correlation when finding equivalent features, default is 0.0000001}
 
+\item{x_train}{Training design matrix to be provided when imputations are to be made from them}
+
 \item{...}{Not used.}
 }
 \value{
@@ -39,11 +42,10 @@ Predict using a gmjmcmc result object.
 }
 \examples{
 result <- gmjmcmc(
- matrix(rnorm(600), 100),
+ x = matrix(rnorm(600), 100),
+ y = matrix(rnorm(100), 100),
  P = 2,
- gaussian.loglik,
- loglik.alpha = gaussian.loglik.alpha,
- c("p0", "exp_dbl")
+ transforms = c("p0", "exp_dbl")
 )
 preds <- predict(result, matrix(rnorm(600), 100))
 

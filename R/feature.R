@@ -97,6 +97,7 @@ update.alphas <- function (feature, alphas, recurse=FALSE) {
 #'
 #' @param x An object of class "feature"
 #' @param dataset Set the regular covariates as columns in a dataset
+#' @param fixed How many of the first columns in dataset are fixed and do not contribute to variable selection
 #' @param alphas Print a "?" instead of actual alphas to prepare the output for alpha estimation
 #' @param labels Should the covariates be named, or just referred to as their place in the data.frame.
 #' @param round Should numbers be rounded when printing? Default is FALSE, otherwise it can be set to the number of decimal places.
@@ -105,11 +106,14 @@ update.alphas <- function (feature, alphas, recurse=FALSE) {
 #' @return String representation of a feature
 #' 
 #' @examples
-#' result <- gmjmcmc(matrix(rnorm(600), 100), P = 2, gaussian.loglik, NULL, c("p0", "exp_dbl"))
+#' result <- gmjmcmc(x = matrix(rnorm(600), 100),
+#' y = matrix(rnorm(100), 100), 
+#' P = 2, 
+#' transforms = c("p0", "exp_dbl"))
 #' print(result$populations[[1]][1])
 #' 
 #' @export
-print.feature <- function (x, dataset = FALSE, alphas = FALSE, labels = FALSE, round = FALSE, ...) {
+print.feature <- function (x, dataset = FALSE, fixed = 0, alphas = FALSE, labels = FALSE, round = FALSE, ...) {
   fString <- ""
   feat <- x[[length(x)]]
   # This is a more complex feature
@@ -145,15 +149,15 @@ print.feature <- function (x, dataset = FALSE, alphas = FALSE, labels = FALSE, r
           if (alphas) fString <- paste0(fString, "?*")
           else fString <- paste0(fString, feat[j,3], "*")
         }
-        fString <- paste0(fString, print.feature(x[[feat[j, 2]]], dataset, alphas, labels, round), op)
+        fString <- paste0(fString, print.feature(x[[feat[j, 2]]], dataset, fixed, alphas, labels, round), op)
       }
     }
     fString <- paste0(fString, ")")
   }
   # This is a plain covariate
   else if (is.numeric(feat)) {
-    if (dataset) fString <- paste0("data[,", feat + 2, "]")
-    else if (labels[1] != F) fString <- labels[feat]
+    if (dataset) fString <- paste0("data$x[,", fixed + feat, "]")
+    else if (labels[1] != FALSE) fString <- labels[feat]
     else fString <- paste0("x", feat)
   } else stop("Invalid feature structure")
   return(fString)

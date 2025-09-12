@@ -4,10 +4,10 @@
 \alias{log_prior}
 \title{Log model prior function}
 \usage{
-log_prior(params, complex)
+log_prior(mlpost_params, complex)
 }
 \arguments{
-\item{params}{list of passed parameters of the likelihood in GMJMCMC}
+\item{mlpost_params}{list of passed parameters of the likelihood in GMJMCMC}
 
 \item{complex}{list of complexity measures of the features included into the model}
 }
@@ -18,6 +18,6 @@ A numeric with the log model prior.
 Log model prior function
 }
 \examples{
-log_prior(params = list(r=2), complex = list(oc = 2))
+log_prior(mlpost_params = list(r=2), complex = list(oc = 2))
 
 }

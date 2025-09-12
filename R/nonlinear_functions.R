@@ -71,61 +71,16 @@ sqroot <- function(x) abs(x)^(1/2)
 #' @export troot
 troot <- function(x) abs(x)^(1/3)
 
-#' To the 2.3  power function
+#' arcsinh transform
 #'
 #' @param x The vector of values
-#' @return x^2.3
+#' @return arcsinh(x)
 #'
 #' @examples
-#' to23(2)
+#' arcsinh(2)
 #'
-#' @export to23
-to23 <- function(x) abs(x)^(2.3)
-
-#' To the 7/2  power function
-#'
-#' @param x The vector of values
-#' @return x^(7/2)
-#'
-#' @examples
-#' to72(2)
-#'
-#' @export to72
-to72 <- function(x) abs(x)^(7/2)
-
-#' Gaussian function
-#'
-#' @param x The vector of values
-#' @return e^(-x^2)
-#'
-#' @examples
-#' gauss(2)
-#'
-#' @export gauss
-gauss <- function(x) exp(-x*x)
-
-#' To 2.5 power
-#'
-#' @param x The vector of values
-#' @return x^(2.5)
-#'
-#' @examples
-#' to25(2)
-#'
-#' @export to25
-to25 <- function(x)abs(x)^(2.5)
-
-
-#' To 3.5 power
-#'
-#' @param x The vector of values
-#' @return x^(3.5)
-#'
-#' @examples
-#' to35(2)
-#'
-#' @export to35
-to35 <- function(x)abs(x)^(3.5)
+#' @export arcsinh
+arcsinh <- function(x) asinh(x)
 
 #' p0 polynomial term
 #'

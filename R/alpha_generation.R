@@ -5,7 +5,7 @@
 
 gen.alphas <- function (strategy, feature, data, loglik, verbose) {
   if (strategy == "deep") feature <- alpha_3(feature, data, loglik, verbose)
-  else if (strategy == "random") feature <- alpha_4(feature) else stop("Not implemented.")
+  else if (strategy == "random") feature <- alpha_4(feature, data) else stop("Not implemented.")
   return(feature)
 }
 
@@ -39,7 +39,7 @@ alpha_2 <- function (feature) {
 #'
 alpha_3 <- function (feature, data, loglik, verbose) {
   # Create the string representation of the feature with variable alphas
-  featfun <- print.feature(feature, dataset = TRUE, alphas = TRUE)
+  featfun <- print.feature(feature, dataset = TRUE, fixed = data$fixed, alphas = TRUE)
   featfun <- set_alphas(featfun)
   # Return if there are no alphas to set
   if (featfun$count == 0) return(feature)
@@ -71,9 +71,9 @@ alpha_3 <- function (feature, data, loglik, verbose) {
 #'
 #' @noRd
 #'
-alpha_4 <- function (feature) {
+alpha_4 <- function (feature, data) {
   # Create the string representation of the feature with variable alphas
-  featfun <- print.feature(feature, dataset = TRUE, alphas = TRUE)
+  featfun <- print.feature(feature, dataset = TRUE, fixed = data$fixed, alphas = TRUE)
   featfun <- set_alphas(featfun)
   
   feature <- update.alphas(feature, rnorm(featfun$count,0,1))

@@ -4,7 +4,14 @@
 \alias{predict.gmjmcmc_parallel}
 \title{Predict using a gmjmcmc result object from a parallel run.}
 \usage{
-\method{predict}{gmjmcmc_parallel}(object, x, link = function(x) x, quantiles = c(0.025, 0.5, 0.975), ...)
+\method{predict}{gmjmcmc_parallel}(
+  object,
+  x,
+  link = function(x) x,
+  quantiles = c(0.025, 0.5, 0.975),
+  x_train = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{The model to use.}
@@ -14,6 +21,8 @@
 \item{link}{The link function to use}
 
 \item{quantiles}{The quantiles to calculate credible intervals for the posterior modes (in model space).}
+
+\item{x_train}{Training design matrix to be provided when imputations are to be made from them}
 
 \item{...}{Additional arguments to pass to merge_results.}
 }
@@ -29,13 +38,11 @@ Predict using a gmjmcmc result object from a parallel run.
 result <- gmjmcmc.parallel(
  runs = 1,
  cores = 1,
- list(populations = "best", complex.measure = 2, tol = 0.0000001),
- matrix(rnorm(600), 100),
+ x = matrix(rnorm(600), 100),
+ y = matrix(rnorm(100), 100),
  P = 2,
- gaussian.loglik,
- loglik.alpha = gaussian.loglik.alpha,
- c("p0", "exp_dbl")
+ transforms = c("p0", "exp_dbl")
 )
-preds <- predict(result$results, matrix(rnorm(600), 100))
+preds <- predict(result, matrix(rnorm(600), 100))
 
 }
