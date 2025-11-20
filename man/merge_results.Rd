@@ -2,9 +2,7 @@
 % Please edit documentation in R/results.R
 \name{merge_results}
 \alias{merge_results}
-\title{Merge a list of multiple results from many runs
-This function will weight the features based on the best marginal posterior in that population
-and merge the results together, simplifying by merging equivalent features (having high correlation).}
+\title{Merge a List of Multiple Results from Many Runs}
 \usage{
 merge_results(
   results,
@@ -42,23 +40,18 @@ An object of class "gmjmcmc_merged" containing the following elements:
 \item{rep.thread}{The index of the thread which contains reported.}
 }
 \description{
-Merge a list of multiple results from many runs
 This function will weight the features based on the best marginal posterior in that population
 and merge the results together, simplifying by merging equivalent features (having high correlation).
 }
 \examples{
-result <- gmjmcmc.parallel(
- runs = 1,
- cores = 1,
- y = matrix(rnorm(100), 100),x = matrix(rnorm(600), 100),
- P = 2,
- transforms = c("p0", "exp_dbl")
-)
+result <-  fbms(semimajoraxis ~ ., data = exoplanet,
+ method = "gmjmcmc.parallel", transforms = c("sigmoid"), 
+ runs = 2, cores = 1)
 
 summary(result)
 
 plot(result)
 
-merge_results(result$results)
+merge_results(result$results.raw)
 
 }

@@ -1,11 +1,10 @@
 ---
-title: "FBMS-Flexible Bayesian Model Selection and Model Averaging"
+title: "FBMS: Flexible Bayesian Model Selection and Model Averaging"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{FBMS - Flexible Bayesian Model Selection and Model Averaging}
+  %\VignetteIndexEntry{FBMS-guide}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-  %\VignetteDepends{fastglm, FBMS}
 ---
 
 This vignette introduces the **FBMS** package and shows how to perform **Flexible Bayesian Model Selection (BMS)** and **Bayesian Model Averaging (BMA)** for linear, generalized, nonlinear, fractional–polynomial, mixed–effect, and logic–regression models. More details are provided in the paper: "FBMS: An R Package for Flexible Bayesian Model Selection and Model Averaging" available on arxiv: more explicit examples accompanying the paper can be found on github <https://github.com/jonlachmann/GMJMCMC/tree/data-inputs/tests_current>
@@ -31,7 +30,7 @@ printn <- function(x) {
   # Combine lines with newline, send as a message to be shown in output
   message(paste(txt, collapse = "\n"))
 }
-
+library(fastglm)
 library(FBMS)
 ```
 
@@ -172,7 +171,7 @@ $$
 ### Parameter priors available (and where to tune)
 
 | Prior (Alias) | $a$ | $b$ | $\rho$ | $s$ | $v$ | $k$ | Families |
-|----|----|----|----|----|----|----|----|
+|---------|---------|---------|---------|---------|---------|---------|---------|
 | **Default:** |  |  |  |  |  |  |  |
 | `g-prior` | $g$ (default: $\max(n, p^2)$) |  |  |  |  |  | GLM |
 | **tCCH-Related Priors:** |  |  |  |  |  |  |  |

@@ -1,4 +1,4 @@
-#' Predict responses from a BGNLM model
+#' Predict Responses from a BGNLM Model
 #'
 #' This function generates predictions from a fitted \code{bgnlm_model} object given a new dataset.
 #'
@@ -17,23 +17,9 @@
 #'         where \eqn{X} is the design matrix and \eqn{\beta} are the model coefficients.
 #'
 #' @examples
-#' \dontrun{
-#' # Example with simulated data
-#' set.seed(123)
-#' x_train <- data.frame(PlanetaryMassJpt = rnorm(100), RadiusJpt = rnorm(100))
-#' model <- list(
-#'   coefs = c(Intercept = -0.5, PlanetaryMassJpt = 0.2, RadiusJpt = -0.1),
-#'   class = "bgnlm_model"
-#' )
-#' class(model) <- "bgnlm_model"
-#'
-#' # New data for prediction
-#' x_new <- data.frame(PlanetaryMassJpt = c(0.1, -0.3), RadiusJpt = c(0.2, -0.1))
-#'
-#' # Predict using the identity link (default)
-#' preds <- predict.bgnlm_model(model, x_new)
-#' }
-#'
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet)
+#' preds <- predict(get.best.model(model), exoplanet[,-1])
 #' @export
 predict.bgnlm_model <- function(object, x, link = function(x) {x}, x_train = NULL, ... ) {
   if(is.null(x_train))
@@ -82,7 +68,7 @@ predict.bgnlm_model <- function(object, x, link = function(x) {x}, x_train = NUL
 }
 
 
-#' Predict using a gmjmcmc result object.
+#' Predict Using a GMJMCMC Result Object
 #'
 #' @inheritParams predict.gmjmcmc_merged
 #' @return A list containing aggregated predictions and per model predictions.
@@ -112,7 +98,7 @@ predict.gmjmcmc <- function (object, x, link = function(x) x, quantiles = c(0.02
   return(predict.gmjmcmc_merged(merged, x, link, quantiles))
 }
 
-#' New idea for a more streamlined function...
+#' New Idea for a More Streamlined Function...
 #' Produces slightly different results from the fun above since this is using all lo.models too.
 #' @inheritParams predict.gmjmcmc_merged
 #' @param pop The population to use.
@@ -132,7 +118,7 @@ predict.gmjmcmc.2 <- function (object, x, link = function(x) x, quantiles = c(0.
   return(predict.mjmcmc(mmodel, x.precalc, link, quantiles))
 }
 
-#' Predict using a merged gmjmcmc result object.
+#' Predict Using a Merged GMJMCMC Result Object
 #'
 #' @param object The model to use.
 #' @param x The new data to use for the prediction, a matrix where each row is an observation.
@@ -211,10 +197,13 @@ predict.gmjmcmc_merged <- function (object, x, link = function(x) x, quantiles =
     }
   }
   set.transforms(transforms.bak)
-  return(list(aggr = aggr, preds = preds))
+  
+  result <- list(aggr = aggr, preds = preds)
+  class(result) <- "fbms_predict"
+  return(result)
 }
 
-#' Predict using a mjmcmc result object.
+#' Predict Using an MJMCMC Result Object
 #'
 #' @inheritParams predict.gmjmcmc_merged
 #' @return A list containing aggregated predictions.
@@ -254,10 +243,12 @@ predict.mjmcmc <- function (object, x, link = function(x) x, quantiles = c(0.025
   mean.pred <- rowSums(yhat %*% diag(as.numeric(object$model.probs)))
   pred.quant <- apply(yhat, 1, weighted.quantiles, weights = object$model.probs, prob = quantiles)
   
-  return(list(mean = mean.pred, quantiles = pred.quant))
+  result <- list(aggr = list(mean = mean.pred, quantiles = pred.quant), preds = mean.pred)
+  class(result) <- "fbms_predict"
+  return(result)
 }
 
-#' Predict using a mjmcmc result object from a parallel run.
+#' Predict Using an MJMCMC Result Object from a Parallel Run
 #'
 #' @inheritParams predict.gmjmcmc_merged
 #' @return A list containing aggregated predictions.
@@ -283,20 +274,23 @@ predict.mjmcmc_parallel <- function (object, x, link = function(x) x, quantiles 
   max.crit <- max(max.crits)
   result.weights <- exp(max.crits - max.crit) / sum(exp(max.crits - max.crit))
   
-  preds <- lapply(object$chains, predict.mjmcmc,x, link, quantiles)
+  preds <- lapply(object$chains, predict,x, link, quantiles)
   
   aggr <- list()
-  aggr$mean <- 0 * preds[[1]]$mean
-  aggr$quantiles <- 0 * preds[[1]]$quantiles
+  aggr$mean <- 0 * preds[[1]]$aggr$mean
+  aggr$quantiles <- 0 * preds[[1]]$aggr$quantiles
   for (i in seq_along(preds)) {
-    aggr$mean <- aggr$mean + preds[[i]]$mean * result.weights[i]
-    aggr$quantiles <- aggr$quantiles + preds[[i]]$quantiles * result.weights[i]
+    aggr$mean <- aggr$mean + preds[[i]]$aggr$mean * result.weights[i]
+    aggr$quantiles <- aggr$quantiles + preds[[i]]$aggr$quantiles * result.weights[i]
   }
   
-  return(list(aggr = aggr, preds = preds))
+  result <- list(aggr = aggr, preds = preds)
+  class(result) <- "fbms_predict"
+  return(result)
+  
 }
 
-#' Predict using a gmjmcmc result object from a parallel run.
+#' Predict Using a GMJMCMC Result Object from a Parallel Run
 #'
 #' @inheritParams predict.gmjmcmc_merged
 #' @param ... Additional arguments to pass to merge_results.
@@ -328,7 +322,7 @@ predict.gmjmcmc_parallel <- function (object, x, link = function(x) x, quantiles
   return(results)
 }
 
-#' Calculate weighted quantiles
+#' Calculate Weighted Quantiles
 #'
 #' @param values The values to use
 #' @param weights The weights of the values
@@ -347,43 +341,238 @@ weighted.quantiles <- function (values, weights, prob = c(0.025, 0.975)) {
   {values[ordered]}[iv]
 }
 
-impute_x <- function (object, x) {
-  if (!is.null(attr(object, which = "imputed"))) {
-    df <- data.frame(x)
-    na.matr <- data.frame(1 * (is.na(df)))
-    cm <- colMeans(na.matr)
-    na.matr <- na.matr[, attr(object, which = "imputed")]
-    names(na.matr) <- paste0("mis_", names(na.matr))
-    for (i in which(cm != 0)){
-      med <- median(df[[i]], na.rm = TRUE)
-      if(is.na(med))
-        stop("No data for imputation in test set, provide x_train in predict!")
-      df[[i]][is.na(df[[i]])] <- med
-    }
-    return(as.matrix(data.frame(df,na.matr)))
-  }
-  return(as.matrix(x))
+
+
+#' Generic for Accessing Aggregated Predictions
+#'
+#' Dispatches to methods for extracting aggregated predictions from objects.
+#'
+#' @param object An object.
+#' @param ... Additional arguments passed to methods.
+#' @return Aggregated predictions (format depends on the object class).
+#' @export
+aggr <- function(object, ...) UseMethod("aggr")
+
+#' Access Aggregated Predictions
+#'
+#' Extracts the aggregated predictions (mean and quantiles) from an FBMS prediction object.
+#'
+#' @param object Object of class "fbms_predict".
+#' @param ... Additional arguments (ignored).
+#' @return List containing aggregated mean and quantiles.
+#' @export
+#' @examples
+#' \donttest{
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet)
+#' pred <- predict(model, exoplanet[51:60, -1])
+#' aggr(pred)
+#' }
+aggr.fbms_predict <- function(object, ...) {
+  stopifnot(inherits(object, "fbms_predict"))
+  object$aggr
+}
+
+#' Generic for Accessing Quantile Predictions
+#'
+#' Dispatches to methods for extracting quantile predictions from objects.
+#'
+#' @param object An object.
+#' @param ... Additional arguments passed to methods.
+#' @return Quantile predictions (format depends on the object class).
+#' @export
+predquantiles <- function(object, ...) UseMethod("predquantiles")
+
+#' Access Quantile Predictions
+#'
+#' Extracts the quantile predictions from an FBMS prediction object.
+#'
+#' @param object Object of class "fbms_predict".
+#' @param ... Additional arguments (ignored).
+#' @return Matrix of quantile predictions, or NULL if not available.
+#' @export
+#' @examples
+#' \donttest{
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet, method = "mjmcmc")
+#' pred <- predict(model, exoplanet[51:60, -1])
+#' predquantiles(pred)
+#' }
+predquantiles.fbms_predict <- function(object, ...) {
+  stopifnot(inherits(object, "fbms_predict"))
+  object$aggr$quantiles
 }
 
 
-impute_x_pred <- function (object, x_test, x_train) {
-  if (!is.null(attr(object, which = "imputed"))) {
-    df <- data.frame(x_test)
-    x_train <- data.frame(x_train)
-    na.matr <- data.frame(1 * (is.na(df)))
-    cm <- colMeans(na.matr)
-    na.matr <- na.matr[, attr(object, which = "imputed")]
-    names(na.matr) <- paste0("mis_", names(na.matr))
-    for (i in which(cm != 0)){
-      med <- median(x_train[[i]], na.rm = TRUE)
-      if(is.na(med))
-      {
-        warning("One or more missing in test columns do not have any data in x_train, test set will be used for imputations!")
-        med <-  median(df[[i]], na.rm = TRUE)
-      }
-      df[[i]][is.na(df[[i]])] <- med
-    }
-    return(as.matrix(data.frame(df,na.matr)))
+#' Generic for Accessing Mean Predictions
+#'
+#' Dispatches to methods for extracting quantile predictions from objects.
+#'
+#' @param object An object.
+#' @param ... Additional arguments passed to methods.
+#' @return Posterior mean predictions (format depends on the object class).
+#' @export
+predmean <- function(object, ...) UseMethod("predmean")
+
+
+#' Access Mean Predictions
+#'
+#' Extracts the mean predictions from an FBMS prediction object.
+#'
+#' @param object Object of class "fbms_predict".
+#' @param ... Additional arguments (ignored).
+#' @return Vector of mean predictions.
+#' @export
+#' @examples
+#' \donttest{
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet, method = "mjmcmc")
+#' pred <- predict(model, exoplanet[51:60, -1])
+#' predmean(pred)
+#' }
+predmean.fbms_predict <- function(object, ...) {
+  stopifnot(inherits(object, "fbms_predict"))
+  object$aggr$mean
+}
+
+#' Access Fitted Values
+#'
+#' Extracts the mean predictions from an FBMS prediction object (alias for mean).
+#'
+#' @param object Object of class "fbms_predict".
+#' @param ... Additional arguments (ignored).
+#' @return Vector of mean predictions.
+#' @export
+#' @examples
+#' \donttest{
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet)
+#' pred <- predict(model, exoplanet[51:60, -1])
+#' fitted(pred)
+#' }
+fitted.fbms_predict <- function(object, ...) {
+  stopifnot(inherits(object, "fbms_predict"))
+  object$aggr$mean
+}
+
+#' Print FBMS Prediction Object
+#'
+#' Displays a summary of an FBMS prediction object, including mean predictions and quantiles.
+#'
+#' @param x Object of class "fbms_predict".
+#' @param ... Additional arguments (ignored).
+#' @return Prints a summary and returns NULL.
+#' @method print fbms_predict
+#' @importFrom utils head
+#' @export
+#' @examples
+#' \donttest{
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet)
+#' pred <- predict(model, exoplanet[51:60, -1])
+#' print(pred)
+#' }
+print.fbms_predict <- function(x, ...) {
+  stopifnot(inherits(x, "fbms_predict"))
+  cat("FBMS Prediction Object:\n")
+  cat("  Number of predictions:", length(x$aggr$mean), "\n")
+  cat("  Mean Predictions (first 6):\n")
+  print(head(x$aggr$mean, 6))
+  if (!is.null(x$aggr$quantiles)) {
+    cat("  Quantiles (first 6 rows):\n")
+    print(head(x$aggr$quantiles, 6))
   }
-  return(as.matrix(x_test))
+  if (!is.null(x$preds)) {
+    cat("  Number of populations:", length(x$preds), "\n")
+  }
+  invisible(NULL)
+}
+
+#' Summary of FBMS Prediction Object
+#'
+#' Provides a detailed summary of an FBMS prediction object, including prediction ranges.
+#'
+#' @param object Object of class "fbms_predict".
+#' @param ... Additional arguments (ignored).
+#' @return Prints a summary and returns NULL.
+#' @method summary fbms_predict
+#' @export
+#' @examples
+#' \donttest{
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet)
+#' pred <- predict(model, exoplanet[51:60, -1])
+#' summary(pred)
+#' }
+summary.fbms_predict <- function(object, ...) {
+  stopifnot(inherits(object, "fbms_predict"))
+  cat("Summary of FBMS Predictions:\n")
+  cat("  Number of predictions:", length(object$aggr$mean), "\n")
+  cat("  Mean prediction range:", format(range(object$aggr$mean), digits = 3), "\n")
+  if (!is.null(object$aggr$quantiles)) {
+    cat("  Quantile ranges:\n")
+    print(apply(object$aggr$quantiles, 2, function(x) format(range(x), digits = 3)))
+  }
+  if (!is.null(object$preds)) {
+    cat("  Number of populations:", length(object$preds), "\n")
+  }
+  invisible(NULL)
+}
+
+#' Plot FBMS Prediction Object
+#'
+#' Plots the mean predictions and quantile intervals from an FBMS prediction object, with quantiles in varying shades of grey.
+#'
+#' @param x Object of class "fbms_predict".
+#' @param ... Additional arguments passed to plot.
+#' @return Plots the predictions and returns NULL.
+#' @method plot fbms_predict
+#' @importFrom grDevices grey.colors
+#' @importFrom graphics legend matlines
+#' @export
+#' @examples
+#' \donttest{
+#' data(exoplanet)
+#' model <- fbms(semimajoraxis ~ ., data = exoplanet)
+#' pred <- predict(model, exoplanet[51:60, -1], 
+#' quantiles = c(0.025, 0.1, 0.5, 0.9, 0.975))
+#' plot(pred)
+#' }
+plot.fbms_predict <- function(x, ...) {
+  stopifnot(inherits(x, "fbms_predict"))
+  n <- length(x$aggr$mean)
+  
+  # Validate quantile dimensions
+  if (!is.null(x$aggr$quantiles)) {
+    if (!is.matrix(x$aggr$quantiles)) {
+      x$aggr$quantiles <- as.matrix(x$aggr$quantiles)
+    }
+    if (nrow(x$aggr$quantiles) != n) {
+      if (ncol(x$aggr$quantiles) == n) {
+        x$aggr$quantiles <- t(x$aggr$quantiles)  # Transpose if needed
+      } else {
+        stop("Dimension mismatch: x$aggr$quantiles must have ", n, " rows")
+      }
+    }
+  }
+  
+  # Plot mean predictions
+  plot(1:n, x$aggr$mean, type = "l", ylab = "Predicted Values", xlab = "Observation Index", 
+       col = "black", lwd = 2, ...)
+  
+  # Plot quantiles with varying shades of grey
+  if (!is.null(x$aggr$quantiles)) {
+    n_quantiles <- ncol(x$aggr$quantiles)
+    grey_shades <- grey.colors(n_quantiles, start = 0.8, end = 0.2)  # Light to dark grey
+    matlines(1:n, x$aggr$quantiles, lty = 2, col = grey_shades)
+    # Add legend for quantiles
+    if (!is.null(colnames(x$aggr$quantiles))) {
+      legend("topright", legend = colnames(x$aggr$quantiles), col = grey_shades, 
+             lty = 2, cex = 0.8, bg = "white")
+    } else {
+      legend("topright", legend = paste0("Quantile ", seq_len(n_quantiles)), 
+             col = grey_shades, lty = 2, cex = 0.8, bg = "white")
+    }
+  }
+  invisible(NULL)
 }

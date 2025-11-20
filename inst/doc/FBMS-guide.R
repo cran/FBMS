@@ -13,7 +13,7 @@ printn <- function(x) {
   # Combine lines with newline, send as a message to be shown in output
   message(paste(txt, collapse = "\n"))
 }
-
+library(fastglm)
 library(FBMS)
 
 ## ----eval=FALSE, include=FALSE------------------------------------------------

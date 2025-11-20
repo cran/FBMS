@@ -3,7 +3,8 @@
 # Created by: jonlachmann
 # Created on: 2021-05-06
 
-#' Merge a list of multiple results from many runs
+#' Merge a List of Multiple Results from Many Runs
+#'
 #' This function will weight the features based on the best marginal posterior in that population
 #' and merge the results together, simplifying by merging equivalent features (having high correlation).
 #'
@@ -29,19 +30,15 @@
 #' \item{rep.thread}{The index of the thread which contains reported.}
 #'
 #' @examples
-#' result <- gmjmcmc.parallel(
-#'  runs = 1,
-#'  cores = 1,
-#'  y = matrix(rnorm(100), 100),x = matrix(rnorm(600), 100),
-#'  P = 2,
-#'  transforms = c("p0", "exp_dbl")
-#' )
+#' result <-  fbms(semimajoraxis ~ ., data = exoplanet,
+#'  method = "gmjmcmc.parallel", transforms = c("sigmoid"), 
+#'  runs = 2, cores = 1)
 #' 
 #' summary(result)
 #' 
 #' plot(result)
 #' 
-#' merge_results(result$results)
+#' merge_results(result$results.raw)
 #'
 #' @export merge_results
 merge_results <- function (results, populations = NULL, complex.measure = NULL, tol = NULL, data = NULL) {
@@ -127,7 +124,7 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
   # Generate mock data to compare features with
   uk <- 1 
   good.mock <- FALSE
-  while(!good.mock & uk < 10)
+  while(!good.mock & uk < 5)
   {
     uk <- uk + 1
     if (is.null(data)) mock.data <- list(x = matrix(runif((results[[1]]$ncov)^2, -100, 100), ncol = results[[1]]$ncov))
@@ -144,17 +141,8 @@ merge_results <- function (results, populations = NULL, complex.measure = NULL, 
       break
     }
   }
-  if(uk == 10)
-    warning(
-      "Constant features detected in merge_results().\n",
-      " - If not already, provide the 'data' argument in the function call.\n",
-      " - If the warning persists, one or more features in your dataset are constant (no variation).\n",
-      "This should not affect results critically, but please:\n",
-      "   * check your input data, or\n",
-      "   * reconsider the chosen nonlinearities/features."
-    )
-  # Calculate the correlation to find equivalent features
-  cors <- cor(mock.data.precalc)
+ 
+  cors <- suppressWarnings(cor(mock.data.precalc))
   
   # A map to link equivalent features together,
   # row 1-3 are the simplest equivalent features based on three different complexity measures
@@ -234,7 +222,7 @@ population.weigths <- function (results, pops.use) {
   return(list(weights = exp(max.crits-max.crit) / sum(exp(max.crits-max.crit)), best = max.crit, thread.best = thread.best, pop.best = pop.best))
 }
 
-#' Function to generate a function string for a model consisting of features
+#' Function to Generate a Function String for a Model Consisting of Features
 #'
 #' @param model A logical vector indicating which features to include
 #' @param features The population of features
@@ -371,16 +359,17 @@ get.mpm.model <- function(result, y, x, labels = F, family = "gaussian", loglik.
   return(model)
 }
 
-
 #' Extract the Best Model from MJMCMC or GMJMCMC Results
 #'
-#' This function retrieves the best model from the results of MJMCMC, MJMCMC parallel, GMJMCMC, or GMJMCMC merged runs 
-#' based on the maximum criterion value (\code{crit}). The returned list includes the model probability, selected features, 
-#' criterion value, intercept parameter, and named coefficients.
+#' Retrieves the best model from the results of MJMCMC, MJMCMC parallel, GMJMCMC, or GMJMCMC merged runs 
+#' based on the maximum criterion value (\code{crit}). The returned list includes the model probability, 
+#' selected features, criterion value, intercept parameter, and named coefficients.
 #'
-#' @param result An object of class \code{"mjmcmc"}, \code{"mjmcmc_parallel"}, \code{"gmjmcmc"}, or \code{"gmjmcmc_merged"}, 
+#' @param result An object of class \code{mjmcmc}, \code{mjmcmc_parallel}, \code{gmjmcmc}, or \code{gmjmcmc_merged}, 
 #' containing the results from the corresponding model search algorithms.
-#' @param labels Logical; if \code{TRUE}, uses labeled feature names when naming the model coefficients. Default is \code{FALSE}.
+#' @param labels Logical; if \code{TRUE}, uses labeled feature names when naming the model coefficients. 
+#' Alternatively, a character vector of feature names. Default is \code{FALSE}.
+#' @param ... Additional arguments passed to methods.
 #'
 #' @return A list containing the details of the best model:
 #' \describe{
@@ -392,92 +381,164 @@ get.mpm.model <- function(result, y, x, labels = F, family = "gaussian", loglik.
 #' }
 #'
 #' @details 
-#' The function identifies the best model by selecting the one with the highest \code{crit} value. Selection logic depends on the class of the \code{result} object:
+#' The function identifies the best model by selecting the one with the highest \code{crit} value. 
+#' Selection logic depends on the class of the \code{result} object:
 #' \describe{
-#'   \item{\code{"mjmcmc"}}{Selects the top model from a single MJMCMC run.}
-#'   \item{\code{"mjmcmc_parallel"}}{Identifies the best chain, then selects the best model from that chain.}
-#'   \item{\code{"gmjmcmc"}}{Selects the best population and model within that population.}
-#'   \item{\code{"gmjmcmc_merged"}}{Finds the best chain and population before extracting the top model.}
+#'   \item{\code{mjmcmc}}{Selects the top model from a single MJMCMC run.}
+#'   \item{\code{mjmcmc_parallel}}{Identifies the best chain, then selects the best model from that chain.}
+#'   \item{\code{gmjmcmc}}{Selects the best population and model within that population.}
+#'   \item{\code{gmjmcmc_merged}}{Finds the best chain and population before extracting the top model.}
 #' }
 #'
 #' @examples
-#' result <- gmjmcmc(x = matrix(rnorm(600), 100),
-#' y = matrix(rnorm(100), 100), 
-#' P = 2, transforms = c("p0", "exp_dbl"))
+#' data(exoplanet)
+#' result <- fbms(semimajoraxis ~ ., data = exoplanet, method = "mjmcmc")
 #' get.best.model(result)
 #'
 #' @export
-get.best.model <- function(result, labels = FALSE) {
-  if (is(result,"mjmcmc")) {
-    mod <- get.best.model.mjmcmc(result, labels)
-    attr(mod, which = "imputed") <- attr(result, which = "imputed")
-    return(mod)
+get.best.model <- function(result, labels = FALSE, ...) {
+  if (!inherits(result, c("mjmcmc", "mjmcmc_parallel", "gmjmcmc", "gmjmcmc_merged"))) {
+    stop("result must be of class 'mjmcmc', 'mjmcmc_parallel', 'gmjmcmc', or 'gmjmcmc_merged'")
   }
-  
-  if (is(result,"mjmcmc_parallel")) {
-    if (length(labels) == 1 && labels[1] == FALSE && length(result[[1]]$labels) > 0) {
-      labels <- result[[1]]$labels
-    }
-    best.chain <- which.max(sapply(result$chains, function (x) x$best.crit))
-    mod <- get.best.model.mjmcmc(result$chains[[best.chain]], labels)
-    attr(mod, which = "imputed") <- attr(result, which = "imputed")
-    return(mod)
+  if (!is.logical(labels) && !is.character(labels)) {
+    stop("labels must be a logical value or a character vector")
   }
-  
-  if (is(result,"gmjmcmc")) {
-    mod <- get.best.model.gmjmcmc(result, labels)
-    attr(mod, which = "imputed") <- attr(result, which = "imputed")
-    return(mod)
-  }
-  
-  if (is(result,"gmjmcmc_merged")) {
-    
-    if (length(labels) == 1 && labels[1] == FALSE && length(result$results.raw[[1]]$labels) > 0) {
-      labels <- result$results.raw[[1]]$labels
-    }
-    best.chain <- which.max(sapply(result$results, function(x) x$best))
-    mod <- get.best.model.gmjmcmc(result$results.raw[[best.chain]], labels)
-    attr(mod, which = "imputed") <- attr(result, which = "imputed")
-    return(mod)
-  }
+  UseMethod("get.best.model")
 }
 
-get.best.model.gmjmcmc <- function (result, labels) {
-  transforms.bak <- set.transforms(result$transforms)
-  if (length(labels) == 1 && labels[1] == FALSE && length(result$labels) > 0) {
-    labels = result$labels
+#' @method get.best.model mjmcmc
+#' @export
+get.best.model.mjmcmc <- function(result, labels = FALSE, ...) {
+  # Input validation
+  stopifnot(
+    "result must be of class 'mjmcmc'" = inherits(result, "mjmcmc"),
+    "result must contain models" = !is.null(result$models) && length(result$models) > 0,
+    "result must contain populations" = !is.null(result$populations) && length(result$populations) > 0
+  )
+  if (is.character(labels)) {
+    stopifnot("labels length must match number of features" = length(labels) == length(result$populations))
   }
   
-  best.pop.id <- which.max(sapply(result$best.margs,function(x)x))
-  best.mod.id <- which.max(sapply(result$models[[best.pop.id]],function(x)x$crit))
+  # Use result$labels if available and labels is FALSE
+  if (length(labels) == 1 && is.logical(labels) && labels[1] == FALSE && length(result$labels) > 0) {
+    labels <- result$labels
+  }
+  
+  # Get best model
+  best.mod.id <- which.max(sapply(result$models, function(x) x$crit))
+  ret <- result$models[[best.mod.id]]
+  
+  # Assign coefficient names
+  coefnames <- sapply(result$populations, print.feature, labels = labels)[ret$model]
+  if (result$intercept) coefnames <- c("Intercept", coefnames)
+  names(ret$coefs) <- coefnames
+  
+  # Set attributes and class
+  ret$needs.precalc <- FALSE
+  class(ret) <- "bgnlm_model"
+  attr(ret, which = "imputed") <- attr(result, which = "imputed")
+  
+  return(ret)
+}
+
+#' @method get.best.model mjmcmc_parallel
+#' @export
+get.best.model.mjmcmc_parallel <- function(result, labels = FALSE, ...) {
+  # Input validation
+  stopifnot(
+    "result must be of class 'mjmcmc_parallel'" = inherits(result, "mjmcmc_parallel"),
+    "result must contain chains" = !is.null(result$chains) && length(result$chains) > 0
+  )
+  if (is.character(labels)) {
+    stopifnot("labels length must match number of features" = length(labels) == length(result$chains[[1]]$populations))
+  }
+  
+  # Use result$chains[[1]]$labels if available and labels is FALSE
+  if (length(labels) == 1 && is.logical(labels) && labels[1] == FALSE && length(result$chains[[1]]$labels) > 0) {
+    labels <- result$chains[[1]]$labels
+  }
+  
+  # Get best chain and model
+  best.chain <- which.max(sapply(result$chains, function(x) x$best.crit))
+  mod <- get.best.model.mjmcmc(result$chains[[best.chain]], labels = labels)
+  attr(mod, which = "imputed") <- attr(result, which = "imputed")
+  
+  return(mod)
+}
+
+#' @method get.best.model gmjmcmc
+#' @export
+get.best.model.gmjmcmc <- function(result, labels = FALSE, ...) {
+  # Input validation
+  stopifnot(
+    "result must be of class 'gmjmcmc'" = inherits(result, "gmjmcmc"),
+    "result must contain models" = !is.null(result$models) && length(result$models) > 0,
+    "result must contain populations" = !is.null(result$populations) && length(result$populations) > 0,
+    "result must contain best.margs" = !is.null(result$best.margs) && length(result$best.margs) > 0
+  )
+  if (is.character(labels)) {
+    stopifnot("labels length must match number of features" = length(labels) == length(result$populations[[1]]))
+  }
+  
+  # Preserve transforms
+  transforms.bak <- set.transforms(result$transforms)
+  
+  # Use result$labels if available and labels is FALSE
+  if (length(labels) == 1 && is.logical(labels) && labels[1] == FALSE && length(result$labels) > 0) {
+    labels <- result$labels
+  }
+  
+  # Get best model
+  best.pop.id <- which.max(sapply(result$best.margs, function(x) x))
+  best.mod.id <- which.max(sapply(result$models[[best.pop.id]], function(x) x$crit))
   ret <- result$models[[best.pop.id]][[best.mod.id]]
+  
+  # Assign additional attributes
   ret$intercept <- result$intercept
   ret$fixed <- result$fixed
   coefnames <- sapply(result$populations[[best.pop.id]], print.feature, labels = labels)[ret$model]
   if (result$intercept) coefnames <- c("Intercept", coefnames)
   names(ret$coefs) <- coefnames
+  
+  # Set attributes and class
   ret$needs.precalc <- FALSE
-  class(ret) = "bgnlm_model"
-  set.transforms(transforms.bak)
+  class(ret) <- "bgnlm_model"
   attr(ret, which = "imputed") <- attr(result, which = "imputed")
+  
+  # Restore transforms
+  set.transforms(transforms.bak)
+  
   return(ret)
 }
 
-get.best.model.mjmcmc <- function (result, labels) {
-  if (length(labels) == 1 && labels[1] == FALSE && length(result$labels) > 0 ) {
-    labels = result$labels
+#' @method get.best.model gmjmcmc_merged
+#' @export
+get.best.model.gmjmcmc_merged <- function(result, labels = FALSE, ...) {
+  # Input validation
+  stopifnot(
+    "result must be of class 'gmjmcmc_merged'" = inherits(result, "gmjmcmc_merged"),
+    "result must contain results" = !is.null(result$results) && length(result$results) > 0,
+    "result must contain results.raw" = !is.null(result$results.raw) && length(result$results.raw) > 0
+  )
+  if (is.character(labels)) {
+    stopifnot("labels length must match number of features" = length(labels) == length(result$results.raw[[1]]$populations[[1]]))
   }
-  best.mod.id <- which.max(sapply(result$models,function(x)x$crit))
-  ret <- result$models[[best.mod.id]]
-  coefnames <- sapply(result$populations, print.feature, labels = labels)[ret$model]
-  if (result$intercept) coefnames <- c("Intercept", coefnames)
-  names(ret$coefs) <- coefnames
-  ret$needs.precalc <- FALSE
-  class(ret) = "bgnlm_model"
-  return(ret)
+  
+  # Use result$results.raw[[1]]$labels if available and labels is FALSE
+  if (length(labels) == 1 && is.logical(labels) && labels[1] == FALSE && length(result$results.raw[[1]]$labels) > 0) {
+    labels <- result$results.raw[[1]]$labels
+  }
+  
+  # Get best chain and model
+  best.chain <- which.max(sapply(result$results, function(x) x$best))
+  mod <- get.best.model.gmjmcmc(result$results.raw[[best.chain]], labels = labels)
+  attr(mod, which = "imputed") <- attr(result, which = "imputed")
+  
+  return(mod)
 }
 
-#' Function to get a character representation of a list of features
+
+#' Function to Get a Character Representation of a List of Features
 #'
 #' @param x A list of feature objects
 #' @param round Rounding precision for parameters of the features
@@ -496,7 +557,7 @@ string.population <- function(x, round = 2) {
   cbind(sapply(x, print.feature, round = round))
 }
 
-#' Function to get a character representation of a list of models
+#' Function to Get a Character Representation of a List of Models
 #'
 #' @param features A list of feature objects on which the models are build
 #' @param models A list of model objects
@@ -517,8 +578,7 @@ string.population.models <- function(features, models, round = 2, link = "I") {
   cbind(sapply(seq_along(models), FUN = function(x) model.string(features = features, model = (models[[x]]$model), round = round, link = "I")))
 }
 
-#' Function to plot the results, works both for results from gmjmcmc and
-#' merged results from merge.results
+#' Function to Plot GMJMCMC Results and Merged Results from merge.results
 #'
 #' @param x The results to use
 #' @param count The number of features to plot, defaults to all
@@ -560,8 +620,28 @@ plot.gmjmcmc <- function (x, count = "all", pop = "best", tol = 0.0000001, data 
   return("done")
 }
 
-#' Function to plot the results, works both for results from gmjmcmc and
-#' merged results from merge.results
+
+#' Plot BGNLM Model
+#'
+#' Plots the coefficients of a BGNLM model.
+#'
+#' @param x Object of class "bgnlm_model".
+#' @param ... Additional arguments passed to barplot.
+#' @return The input object (invisibly).
+#' @method plot bgnlm_model
+#' @importFrom stats coef
+#' @export
+#' @examples
+#' data(exoplanet)
+#' model <- get.best.model(fbms(semimajoraxis ~ ., data = exoplanet, family = "gaussian"))
+#' plot(model)
+plot.bgnlm_model <- function(x, ...) {
+  stopifnot(inherits(x, "bgnlm_model"))
+  coefs <- coef(x)
+  barplot(coefs, main = "BGNLM Coefficients", names.arg = names(coefs), horiz  = TRUE, ...)
+}
+
+#' Function to Plot GMJMCMC Results and Merged Results from merge.results
 #'
 #' @param x The results to use
 #' @param count The number of features to plot, defaults to all
@@ -606,7 +686,7 @@ marg.prob.plot <- function (feats.strings, marg.probs, count = "all", ...) {
   text((max(marg.probs[(tot - count + 1):tot]) / 2), y, feats.strings[(tot - count + 1):tot])
 }
 
-#' Plot a mjmcmc_parallel run
+#' Plot an mjmcmc_parallel Run
 #' @inheritParams plot.mjmcmc
 #' @return No return value, just creates a plot
 #' 
@@ -647,7 +727,7 @@ run.weigths <- function (results) {
   return(exp(best.crits - max.crit) / sum(exp(best.crits - max.crit)))
 }
 
-#' Plot a gmjmcmc_merged run
+#' Plot a gmjmcmc_merged Run
 #' @inheritParams plot.gmjmcmc
 #' @return No return value, just creates a plot
 #' 
@@ -675,7 +755,7 @@ plot.gmjmcmc_merged <- function (x, count = "all", pop = NULL,tol =  0.0000001, 
 }
 
 
-#' Compute effects for specified in labels covariates using a fitted model.
+#' Compute Effects for Specified Covariates Using a Fitted Model
 #'
 #' This function computes model averaged effects for specified covariates using a fitted model object.
 #' The effects are expected change in the BMA linear predictor having an increase of the corresponding covariate by one unit, while other covariates are fixed to 0.
